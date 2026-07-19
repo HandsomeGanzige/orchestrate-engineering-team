@@ -1,0 +1,6 @@
+.DS_Store
+.agent-work/
+coverage/
+node_modules/
+.pnpm-store/
+docs/

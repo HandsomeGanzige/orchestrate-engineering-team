@@ -1,0 +1,27 @@
+{
+  "name": "orchestrate-engineering-team",
+  "version": "0.1.0",
+  "description": "Coordinate a role-based engineering team around resumable, hierarchical work items.",
+  "author": {
+    "name": "HandsomeGanzige"
+  },
+  "repository": "https://github.com/HandsomeGanzige/orchestrate-engineering-team",
+  "license": "MIT",
+  "keywords": [
+    "engineering",
+    "multi-agent",
+    "orchestration",
+    "review",
+    "testing"
+  ],
+  "skills": "./.agents/skills/",
+  "interface": {
+    "displayName": "Engineering Team Orchestrator",
+    "shortDescription": "Coordinate role-based engineering delivery",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ]
+  }
+}

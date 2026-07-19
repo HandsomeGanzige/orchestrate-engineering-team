@@ -1,0 +1,48 @@
+name: Bug report
+description: Report incorrect orchestration, validation, packaging, or documentation behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Please remove secrets and private repository content before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Plugin version, tag, or commit.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Main orchestration Skill
+        - Internal role Skill
+        - Agent profile or metadata validation
+        - Plugin installation or marketplace
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the minimal prompt, command, or repository-neutral steps.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

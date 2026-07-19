@@ -1,0 +1,90 @@
+version: 1
+enforcement: advisory
+
+profiles:
+  development:
+    name: Development Agent
+    route_when: The current todo requires implementation or implementation-owned tests.
+    skill:
+      name: develop-work-item
+      path: .agents/skills/develop-work-item/SKILL.md
+    write_scope: assigned-files
+    capabilities:
+      required: [workspace-read, workspace-write, shell]
+      optional: [browser, external-docs]
+      prohibited: [task-state-write, user-decision]
+    context:
+      - current-todo
+      - confirmed-goal
+      - relevant-confirmed-decisions
+      - allowed-scope
+      - project-fact-pointers
+      - material-pointers
+    returns: &standard-return
+      - status
+      - result
+      - role-evidence
+      - evidence-or-involved-files
+      - unavailable-capabilities
+      - discovered-problems
+      - unresolved-matters
+      - suggested-next-action
+
+  test:
+    name: Test Agent
+    route_when: A delivered behavior needs independent verification and evidence.
+    skill:
+      name: verify-work-item
+      path: .agents/skills/verify-work-item/SKILL.md
+    write_scope: none
+    capabilities:
+      required: [workspace-read, shell]
+      optional: [browser, external-docs]
+      prohibited: [workspace-write, task-state-write, user-decision]
+    context:
+      - expected-result
+      - verification-target
+      - changed-surface
+      - available-verification-methods
+      - project-fact-pointers
+    returns: *standard-return
+
+  review:
+    name: Review Agent
+    route_when: A delivered change needs an independent defect, alignment, and maintainability review.
+    skill:
+      name: review-work-item
+      path: .agents/skills/review-work-item/SKILL.md
+    write_scope: none
+    capabilities:
+      required: [workspace-read, code-search]
+      optional: [diff, security-analysis]
+      prohibited: [workspace-write, task-state-write, user-decision]
+    context:
+      - confirmed-goal
+      - relevant-confirmed-decisions
+      - changed-surface
+      - project-fact-pointers
+      - verification-summary
+    returns: *standard-return
+
+  architecture:
+    name: Architecture Agent
+    route_when: A complex todo needs alternatives, tradeoffs, external-practice research, or a technical recommendation.
+    skill:
+      name: architect-work-item
+      path: .agents/skills/architect-work-item/SKILL.md
+    write_scope: none
+    capabilities:
+      required: [workspace-read]
+      optional: [web-search, external-docs]
+      prohibited: [workspace-write, task-state-write, user-decision]
+    context:
+      - problem
+      - confirmed-goal
+      - relevant-confirmed-decisions
+      - constraints
+      - confirmed-preferences
+      - project-fact-pointers
+      - research-direction
+    returns: *standard-return

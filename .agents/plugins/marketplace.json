@@ -1,0 +1,20 @@
+{
+  "name": "orchestrate-engineering-team",
+  "interface": {
+    "displayName": "Engineering Team Orchestrator"
+  },
+  "plugins": [
+    {
+      "name": "orchestrate-engineering-team",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -1,90 +1,96 @@
-version: 1
 enforcement: advisory
 
 profiles:
   development:
     name: Development Agent
-    route_when: The current todo requires implementation or implementation-owned tests.
+    route_when: A bounded Todo requires production implementation or implementation-owned tests.
     skill:
       name: develop-work-item
       path: .agents/skills/develop-work-item/SKILL.md
-    write_scope: assigned-files
+    write_scope: assigned-production-files-or-modules-only
     capabilities:
       required: [workspace-read, workspace-write, shell]
       optional: [browser, external-docs]
       prohibited: [task-state-write, user-decision]
     context:
-      - current-todo
-      - confirmed-goal
-      - relevant-confirmed-decisions
-      - allowed-scope
-      - project-fact-pointers
-      - material-pointers
-    returns: &standard-return
+      - assignment-id
+      - objective-and-done-conditions
+      - confirmed-decisions
+      - exact-project-fact-pointers
+      - exact-material-pointers
+      - allowed-read-and-write-scope
+      - capability-availability
+    returns: &concise-envelope
       - status
-      - result
-      - role-evidence
-      - evidence-or-involved-files
-      - unavailable-capabilities
-      - discovered-problems
-      - unresolved-matters
-      - suggested-next-action
+      - summary
+      - artifacts
+      - files
+      - checks
+      - requires_test
+      - test_reason
+      - requires_review
+      - review_reason
+      - blockers
 
   test:
     name: Test Agent
-    route_when: A delivered behavior needs independent verification and evidence.
+    route_when: A delivered behavior requires the default independent verification or a focused retest.
     skill:
       name: verify-work-item
       path: .agents/skills/verify-work-item/SKILL.md
-    write_scope: none
+    write_scope: assigned-long-evidence-materials-test-only
     capabilities:
       required: [workspace-read, shell]
-      optional: [browser, external-docs]
-      prohibited: [workspace-write, task-state-write, user-decision]
+      optional: [browser]
+      prohibited: [production-write, test-write, task-state-write, user-decision]
     context:
-      - expected-result
-      - verification-target
+      - assignment-id
+      - expected-behavior-and-done-conditions
       - changed-surface
+      - exact-project-fact-pointers
       - available-verification-methods
-      - project-fact-pointers
-    returns: *standard-return
+      - optional-assigned-long-evidence-path
+      - capability-availability
+    returns: *concise-envelope
 
   review:
     name: Review Agent
-    route_when: A delivered change needs an independent defect, alignment, and maintainability review.
+    route_when: A delivered change requires the default independent defect, alignment, regression, and maintainability review or a focused rereview.
     skill:
       name: review-work-item
       path: .agents/skills/review-work-item/SKILL.md
-    write_scope: none
+    write_scope: assigned-long-evidence-materials-review-only
     capabilities:
       required: [workspace-read, code-search]
       optional: [diff, security-analysis]
-      prohibited: [workspace-write, task-state-write, user-decision]
+      prohibited: [production-write, test-write, task-state-write, user-decision]
     context:
-      - confirmed-goal
-      - relevant-confirmed-decisions
+      - assignment-id
+      - confirmed-goal-and-decisions
       - changed-surface
-      - project-fact-pointers
-      - verification-summary
-    returns: *standard-return
+      - exact-project-fact-pointers
+      - concise-verification-summary
+      - optional-assigned-long-evidence-path
+      - capability-availability
+    returns: *concise-envelope
 
   architecture:
     name: Architecture Agent
-    route_when: A complex todo needs alternatives, tradeoffs, external-practice research, or a technical recommendation.
+    route_when: A bounded decision needs project-grounded alternatives, tradeoffs, research, or a recommendation.
     skill:
       name: architect-work-item
       path: .agents/skills/architect-work-item/SKILL.md
-    write_scope: none
+    write_scope: assigned-materials-architecture-only
     capabilities:
       required: [workspace-read]
-      optional: [web-search, external-docs]
-      prohibited: [workspace-write, task-state-write, user-decision]
+      optional: [web-search, external-docs, diagramming]
+      prohibited: [production-write, task-state-write, user-decision]
     context:
-      - problem
-      - confirmed-goal
-      - relevant-confirmed-decisions
-      - constraints
-      - confirmed-preferences
-      - project-fact-pointers
-      - research-direction
-    returns: *standard-return
+      - assignment-id
+      - objective-and-done-conditions
+      - confirmed-constraints-and-decisions
+      - exact-project-fact-pointers
+      - exact-material-pointers
+      - assigned-material-write-paths
+      - capability-availability
+    returns: *concise-envelope

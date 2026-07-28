@@ -18,6 +18,12 @@ const EXPECTED_SKILLS = Object.freeze([
   "verify-work-item",
 ]);
 
+/**
+ * Restricts destructive Plugin lifecycle checks to a disposable GitHub Actions runner.
+ *
+ * @param {NodeJS.ProcessEnv} [environment=process.env] - Environment used to prove CI isolation.
+ * @returns {string} Absolute disposable runner temporary directory.
+ */
 export function assertDisposableCiRunner(environment = process.env) {
   if (
     environment.CI !== "true" ||
@@ -31,6 +37,14 @@ export function assertDisposableCiRunner(environment = process.env) {
   return path.resolve(environment.RUNNER_TEMP);
 }
 
+/**
+ * Runs a Codex CLI command synchronously under the supplied isolated environment.
+ *
+ * @param {string[]} args - Codex CLI argument vector.
+ * @param {NodeJS.ProcessEnv} environment - Child-process environment.
+ * @param {{allowFailure?: boolean}} [options] - Whether non-zero exits should be returned instead of thrown.
+ * @returns {import('node:child_process').SpawnSyncReturns<string>} Child-process result.
+ */
 function runCodex(args, environment, { allowFailure = false } = {}) {
   const result = spawnSync("codex", args, {
     cwd: PROJECT_ROOT,
@@ -44,6 +58,13 @@ function runCodex(args, environment, { allowFailure = false } = {}) {
   return result;
 }
 
+/**
+ * Parses JSON emitted by a successful Codex CLI command.
+ *
+ * @param {import('node:child_process').SpawnSyncReturns<string>} result - Command result containing stdout.
+ * @param {string} label - Operation label used in parse failures.
+ * @returns {unknown} Parsed JSON response.
+ */
 function parseJsonOutput(result, label) {
   try {
     return JSON.parse(result.stdout);
@@ -52,6 +73,12 @@ function parseJsonOutput(result, label) {
   }
 }
 
+/**
+ * Recursively detects the target Plugin in varying Codex list response shapes.
+ *
+ * @param {unknown} value - Candidate response fragment.
+ * @returns {boolean} Whether an enabled installation record is present.
+ */
 function containsInstalledPlugin(value) {
   if (Array.isArray(value)) return value.some(containsInstalledPlugin);
   if (!value || typeof value !== "object") return false;
@@ -67,6 +94,13 @@ function containsInstalledPlugin(value) {
   return Object.values(value).some(containsInstalledPlugin);
 }
 
+/**
+ * Validates the exact five enabled Plugin Skills discovered by the Codex app server.
+ *
+ * @param {object} response - `skills/list` response body.
+ * @param {string} codexHome - Isolated Codex home containing the Plugin cache.
+ * @returns {void} Returns when discovery names, paths, enablement, and errors are correct.
+ */
 export function assertDiscoveredPluginSkills(response, codexHome) {
   assert.ok(response && Array.isArray(response.data), "skills/list did not return data entries");
   const pluginCache = `${path.join(codexHome, "plugins", "cache")}${path.sep}`;
@@ -100,6 +134,13 @@ export function assertDiscoveredPluginSkills(response, codexHome) {
   assert.deepEqual(pluginErrors, [], "Codex reported errors while loading installed Plugin Skills");
 }
 
+/**
+ * Starts a temporary Codex app server and requests a forced Skill discovery pass.
+ *
+ * @param {NodeJS.ProcessEnv} environment - Isolated Codex child environment.
+ * @param {string} codexHome - Isolated Codex home directory.
+ * @returns {Promise<void>} Resolves after the installed Plugin Skills are discovered and validated.
+ */
 async function discoverInstalledPluginSkills(environment, codexHome) {
   const workspace = path.join(codexHome, "skill-discovery-workspace");
   await mkdir(workspace);
@@ -117,12 +158,25 @@ async function discoverInstalledPluginSkills(environment, codexHome) {
       () => reject(new Error(`skills/list timed out: ${stderr.trim()}`)),
       15_000,
     );
+    /**
+     * Settles app-server discovery exactly once and clears its timeout.
+     *
+     * @param {(value: unknown) => void} callback - Promise resolver or rejecter.
+     * @param {unknown} value - Resolution value or error.
+     * @returns {void} Settles only the first terminal event.
+     */
     const finish = (callback, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       callback(value);
     };
+    /**
+     * Sends one newline-delimited JSON-RPC message to the Codex app server.
+     *
+     * @param {object} message - JSON-RPC request or notification.
+     * @returns {boolean} Writable-stream backpressure signal from `stdin.write`.
+     */
     const send = (message) => child.stdin.write(`${JSON.stringify(message)}\n`);
 
     child.stderr.on("data", (chunk) => {
@@ -173,7 +227,7 @@ async function discoverInstalledPluginSkills(environment, codexHome) {
       id: 1,
       method: "initialize",
       params: {
-        clientInfo: { name: "orchestrate-engineering-team-ci", version: "0.1.0" },
+        clientInfo: { name: "orchestrate-engineering-team-ci", version: "0.2.0" },
         capabilities: { experimentalApi: true },
       },
     });
@@ -185,6 +239,12 @@ async function discoverInstalledPluginSkills(environment, codexHome) {
   assertDiscoveredPluginSkills(response, codexHome);
 }
 
+/**
+ * Installs, discovers, removes, and cleans the optional Codex Plugin in isolated CI state.
+ *
+ * @param {NodeJS.ProcessEnv} [environment=process.env] - CI environment used to build isolated Codex state.
+ * @returns {Promise<void>} Resolves when installation, discovery, removal, and cleanup all pass.
+ */
 export async function runCodexPluginLifecycle(environment = process.env) {
   const runnerTemp = assertDisposableCiRunner(environment);
   const isolatedCodexHome = await mkdtemp(

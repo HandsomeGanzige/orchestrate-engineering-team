@@ -1,44 +1,45 @@
 ---
 name: architect-work-item
-description: Investigate a bounded complex engineering work item using project facts, confirmed constraints, relevant external practices, and explicit tradeoffs, then return architecture alternatives and a recommendation for user confirmation. Use only when orchestrate-engineering-team explicitly attaches this Skill to a spawned Architecture Agent; do not use it for implementation, testing, review, Main Agent coordination, or accepting decisions.
+description: Investigate one bounded Architecture Assignment dispatched by orchestrate-engineering-team, compare meaningful technical options, and return a decision-ready recommendation with evidence. Use only when a Main Agent explicitly assigns this role; do not use for implementation, testing, review, task coordination, or accepting user decisions.
 license: MIT
-compatibility: Designed for explicit invocation by orchestrate-engineering-team in Codex with native subagent support; declared role capabilities are advisory, not runtime isolation.
 metadata:
   author: HandsomeGanzige
-  version: "0.1.0"
 ---
 
 # Architect Work Item
 
-Act only as the Architecture Agent for the supplied task package.
+Act only as the Architecture Agent for the supplied Assignment. Do not create a Work Item, Todo, Assignment document, directory, or `index.md`, and do not modify any task index or production file.
 
-## Ground the problem
+## Deliver the bounded proposal
 
-1. Read the problem, confirmed outcome, relevant decisions, constraints, preferences, project facts, and research direction.
-2. Treat code, tests, types, configuration, and authoritative project documentation as stronger evidence than task notes.
-3. Check required capabilities before investigation. Report missing capabilities and resulting uncertainty.
-4. Research external practices only when they materially inform the decision, preferring current primary sources.
-5. Do not modify project files or `.agent-work`.
-
-## Produce a decision-ready proposal
-
-1. Separate confirmed constraints from assumptions and open questions.
-2. Present materially different viable options when alternatives exist.
-3. Compare tradeoffs in complexity, delivery risk, operability, maintainability, and project fit.
-4. Recommend one option and explain why it best fits the confirmed context.
-5. Identify every decision that requires user agreement. Do not present a recommendation as an accepted decision.
+1. Read only the package-listed project facts, Material pointers, confirmed constraints, and research direction. Project code, tests, types, configuration, and authoritative documentation outrank task notes.
+2. Verify every required runtime capability before working. If any is unavailable, return `blocked`; do not simulate research, substitute another role, widen scope, or claim unsupported isolation.
+3. Separate confirmed constraints from assumptions. Compare materially different viable options when they exist, covering project fit, complexity, delivery risk, operability, and maintainability.
+4. Recommend the best-supported option. Identify only decisions that genuinely remain for the user; never present a proposal as accepted.
+5. Write detailed research, diagrams, experiments, prototypes, or proposals only to explicitly assigned paths under the current Work Item's `materials/architecture/`. Keep short conclusions in the return envelope instead. Do not write elsewhere.
+6. Vote on independent Test and Review based on the intended changed surface. A `false` vote requires evidence that the independent role would add no meaningful signal; small size or developer-run checks alone are insufficient.
 
 ## Return to Main
 
-Return the task-package envelope with:
+Return only this envelope, with at most three one-sentence summary entries and no process narrative, private reasoning, full logs, or parent-task restatement:
 
-- `Status`: `completed`, `partial`, or `blocked`.
-- `Result`: the recommended architecture conclusion.
-- `Role evidence`: alternatives, tradeoffs, recommendation, assumptions, and decision points.
-- `Evidence or involved files`: project facts and external sources supporting the proposal.
-- `Unavailable capabilities`: missing capabilities and affected conclusions.
-- `Discovered problems`: constraints, conflicts, or architectural risks.
-- `Unresolved matters`: uncertainty and decisions that need user confirmation.
-- `Suggested next action`: the next discussion, experiment, or Development action.
+```yaml
+status: completed | partial | blocked
+summary:
+  - "Conclusion, material decision point, or in-scope risk."
+artifacts:
+  - path: "relative/material/path"
+    purpose: "Why Main should retain it."
+files:
+  - "Production file actually inspected or implicated."
+checks:
+  - command: "Command run or check name."
+    result: passed | failed | not_run
+requires_test: true | false
+test_reason: "One-sentence evidence-based reason."
+requires_review: true | false
+review_reason: "One-sentence evidence-based reason."
+blockers: []
+```
 
-Do not implement the proposal, update task indexes, or accept user decisions.
+Use `partial` or `blocked` only with an actionable blocker. List no artifact that was not written and no file that was not involved.

@@ -12,18 +12,22 @@ const ROLE_PROFILES = Object.freeze({
   development: {
     name: "Development Agent",
     skill: "develop-work-item",
+    writeScope: "assigned-production-files-or-modules-only",
   },
   test: {
     name: "Test Agent",
     skill: "verify-work-item",
+    writeScope: "assigned-long-evidence-materials-test-only",
   },
   review: {
     name: "Review Agent",
     skill: "review-work-item",
+    writeScope: "assigned-long-evidence-materials-review-only",
   },
   architecture: {
     name: "Architecture Agent",
     skill: "architect-work-item",
+    writeScope: "assigned-materials-architecture-only",
   },
 });
 
@@ -34,29 +38,54 @@ const SKILL_NAMES = Object.freeze([
 
 export const STANDARD_RETURN = Object.freeze([
   "status",
-  "result",
-  "role-evidence",
-  "evidence-or-involved-files",
-  "unavailable-capabilities",
-  "discovered-problems",
-  "unresolved-matters",
-  "suggested-next-action",
+  "summary",
+  "artifacts",
+  "files",
+  "checks",
+  "requires_test",
+  "test_reason",
+  "requires_review",
+  "review_reason",
+  "blockers",
 ]);
 
 const REGISTRY_PATH =
   ".agents/skills/orchestrate-engineering-team/references/agent-profiles.yaml";
 const TASK_PACKET_PATH =
-  ".agents/skills/orchestrate-engineering-team/assets/subagent-task-packet.md";
+  ".agents/skills/orchestrate-engineering-team/assets/role-task-packet.md";
+const MAIN_RESOURCE_PATHS = Object.freeze([
+  ".agents/skills/orchestrate-engineering-team/scripts/cli-runtime.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/workflow-document.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/verification.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/work-model.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/workflow-contract.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/workflow-core.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/workflow-runtime.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/workflow-store.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/workflow.mjs",
+  ".agents/skills/orchestrate-engineering-team/scripts/value-policy.mjs",
+  ".agents/skills/orchestrate-engineering-team/assets/work-item-index.md",
+  ".agents/skills/orchestrate-engineering-team/assets/workspace-index.md",
+  TASK_PACKET_PATH,
+  ".agents/skills/orchestrate-engineering-team/references/state-and-voting.md",
+  REGISTRY_PATH,
+]);
 const SKILL_FRONTMATTER_FIELDS = Object.freeze([
   "name",
   "description",
   "license",
-  "compatibility",
   "metadata",
   "allowed-tools",
 ]);
 
 class YamlSyntaxError extends Error {
+  /**
+   * Creates a YAML syntax error carrying an exact source location.
+   *
+   * @param {string} message - Parser failure description.
+   * @param {number} line - One-based source line.
+   * @param {number} column - One-based source column.
+   */
   constructor(message, line, column) {
     super(message);
     this.line = line;
@@ -66,19 +95,50 @@ class YamlSyntaxError extends Error {
 
 const MAX_YAML_ALIAS_COUNT = 50;
 
+/**
+ * Creates a normalized source location for diagnostics.
+ *
+ * @param {number} line - One-based source line.
+ * @param {number} [column=1] - One-based source column.
+ * @returns {{line: number, column: number}} Normalized diagnostic location.
+ */
 function location(line, column = 1) {
   return { line, column };
 }
 
+/**
+ * Converts a structured YAML path into the stable lookup key used by the location map.
+ *
+ * @param {(string|number)[]} parts - Mapping keys and sequence indexes from the document root.
+ * @returns {string} Dot-delimited internal lookup key.
+ */
 function locationKey(parts) {
   return parts.join(".");
 }
 
+/**
+ * Resolves a character offset to a one-based line and column with an optional line offset.
+ *
+ * @param {import('yaml').LineCounter} lineCounter - YAML parser line counter.
+ * @param {number} offset - Zero-based source character offset.
+ * @param {number} lineOffset - Additional line count for embedded YAML such as frontmatter.
+ * @returns {{line: number, column: number}} Adjusted source location.
+ */
 function located(lineCounter, offset, lineOffset) {
   const at = lineCounter.linePos(Math.max(0, offset ?? 0));
   return location(at.line + lineOffset, at.col);
 }
 
+/**
+ * Recursively records source locations for YAML mapping keys and sequence items.
+ *
+ * @param {unknown} node - Current YAML AST node.
+ * @param {(string|number)[]} parts - Structured path to the current node.
+ * @param {Map<string, {line: number, column: number}>} locations - Mutable location index.
+ * @param {import('yaml').LineCounter} lineCounter - Parser line counter.
+ * @param {number} lineOffset - Additional embedded-document line offset.
+ * @returns {void} Populates the supplied location map in place.
+ */
 function recordYamlLocations(node, parts, locations, lineCounter, lineOffset) {
   if (!node) return;
   if (node.range) {
@@ -112,6 +172,13 @@ function recordYamlLocations(node, parts, locations, lineCounter, lineOffset) {
   }
 }
 
+/**
+ * Converts parsed YAML values into null-prototype data while rejecting cycles and unsafe keys.
+ *
+ * @param {unknown} value - YAML-produced value to sanitize recursively.
+ * @param {Set<object>} [ancestors=new Set()] - Active recursion chain used to detect cycles.
+ * @returns {unknown} Primitive, array, or null-prototype mapping safe for exact-schema validation.
+ */
 function toSafeYamlValue(value, ancestors = new Set()) {
   if (!value || typeof value !== "object") return value;
   if (ancestors.has(value)) {
@@ -137,8 +204,11 @@ function toSafeYamlValue(value, ancestors = new Set()) {
 }
 
 /**
- * Parse standards-valid YAML, then convert every mapping to a null-prototype
- * object before applying the project's exact schemas.
+ * Parses standards-valid YAML and converts every mapping to null-prototype data.
+ *
+ * @param {string} source - Complete YAML source text.
+ * @param {{lineOffset?: number}} [options] - Additional source lines preceding embedded YAML.
+ * @returns {{value: unknown, locations: Map<string, {line: number, column: number}>, lineCounter: import('yaml').LineCounter}} Safe parsed value and source-location metadata.
  */
 export function parseStrictYaml(source, { lineOffset = 0 } = {}) {
   const lineCounter = new LineCounter();
@@ -172,6 +242,12 @@ export function parseStrictYaml(source, { lineOffset = 0 } = {}) {
   }
 }
 
+/**
+ * Locates the first YAML alias node so unsupported alias use can be diagnosed precisely.
+ *
+ * @param {unknown} node - YAML AST node to inspect recursively.
+ * @returns {unknown|null} First alias node, or `null` when none exists.
+ */
 function findFirstAlias(node) {
   if (!node) return null;
   if (isAlias(node)) return node;
@@ -189,10 +265,26 @@ function findFirstAlias(node) {
   return null;
 }
 
+/**
+ * Creates one normalized checker diagnostic.
+ *
+ * @param {string} file - Project-relative file path.
+ * @param {{line: number, column: number}} at - Source location.
+ * @param {string} code - Stable diagnostic code.
+ * @param {string} reason - Human-readable failure explanation.
+ * @returns {object} Diagnostic record consumed by formatting and tests.
+ */
 function makeDiagnostic(file, at, code, reason) {
   return { file, line: at?.line ?? 1, column: at?.column ?? 1, code, reason };
 }
 
+/**
+ * Resolves the best recorded location for a structured YAML path.
+ *
+ * @param {object} document - Parsed strict YAML document with a location map.
+ * @param {(string|number)[]} parts - Desired mapping or sequence path.
+ * @returns {{line: number, column: number}} Exact or nearest-parent location.
+ */
 function at(document, parts) {
   for (let length = parts.length; length >= 0; length -= 1) {
     const found = document.locations.get(locationKey(parts.slice(0, length)));
@@ -201,6 +293,18 @@ function at(document, parts) {
   return location(1, 1);
 }
 
+/**
+ * Compares mapping keys against an exact allowlist and records missing or unknown fields.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - File being validated.
+ * @param {object} document - Strict YAML document providing source locations.
+ * @param {unknown} value - Candidate mapping value.
+ * @param {string[]} expected - Exact permitted key set.
+ * @param {(string|number)[]} parts - Structured path to the mapping.
+ * @param {string} code - Diagnostic code for shape failures.
+ * @returns {boolean} `true` when the mapping contains exactly the expected keys.
+ */
 function compareKeys(diagnostics, file, document, value, expected, parts, code) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     diagnostics.push(
@@ -224,6 +328,17 @@ function compareKeys(diagnostics, file, document, value, expected, parts, code) 
   return true;
 }
 
+/**
+ * Requires a non-empty string and emits a located diagnostic on failure.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - File being validated.
+ * @param {object} document - Strict YAML document providing locations.
+ * @param {unknown} value - Candidate string.
+ * @param {(string|number)[]} parts - Structured field path.
+ * @param {string} code - Diagnostic code for failure.
+ * @returns {boolean} Whether the value is a non-empty string.
+ */
 function requireString(diagnostics, file, document, value, parts, code) {
   if (typeof value !== "string" || !value.trim()) {
     diagnostics.push(
@@ -234,6 +349,18 @@ function requireString(diagnostics, file, document, value, parts, code) {
   return true;
 }
 
+/**
+ * Requires a string whose length lies within inclusive bounds.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - File being validated.
+ * @param {object} document - Strict YAML document providing locations.
+ * @param {unknown} value - Candidate string.
+ * @param {(string|number)[]} parts - Structured field path.
+ * @param {string} code - Diagnostic code for failure.
+ * @param {{minimum?: number, maximum?: number, label?: string}} [bounds] - Inclusive length policy and display label.
+ * @returns {boolean} Whether the value satisfies type and length requirements.
+ */
 function requireBoundedString(
   diagnostics,
   file,
@@ -264,6 +391,17 @@ function requireBoundedString(
   return true;
 }
 
+/**
+ * Requires an array containing only non-empty strings.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - File being validated.
+ * @param {object} document - Strict YAML document providing locations.
+ * @param {unknown} value - Candidate array.
+ * @param {(string|number)[]} parts - Structured field path.
+ * @param {string} code - Diagnostic code for failure.
+ * @returns {boolean} Whether the value is a valid string array.
+ */
 function requireStringArray(diagnostics, file, document, value, parts, code) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item)) {
     diagnostics.push(
@@ -274,10 +412,26 @@ function requireStringArray(diagnostics, file, document, value, parts, code) {
   return true;
 }
 
+/**
+ * Normalizes a Markdown return-contract label for exact comparison.
+ *
+ * @param {string} label - Raw field label extracted from Markdown.
+ * @returns {string} Lowercase label without punctuation or code formatting.
+ */
 function normalizeReturnLabel(label) {
-  return label.trim().toLowerCase().replaceAll(/\s+/g, "-");
+  return label.trim().toLowerCase().replaceAll(/[\s-]+/g, "_");
 }
 
+/**
+ * Validates an ordered Markdown return-contract field list against the role protocol.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - Skill or asset file being validated.
+ * @param {string[]} labels - Extracted return-field labels in document order.
+ * @param {number[]} lineNumbers - Source line for each extracted label.
+ * @param {number} fallbackLine - Location used when fields are missing entirely.
+ * @returns {void} Appends deterministic diagnostics for missing, unknown, or reordered fields.
+ */
 function validateReturnContract(diagnostics, file, labels, lineNumbers, fallbackLine) {
   const normalized = labels.map(normalizeReturnLabel);
   const mismatch = STANDARD_RETURN.findIndex((field, index) => normalized[index] !== field);
@@ -294,6 +448,15 @@ function validateReturnContract(diagnostics, file, labels, lineNumbers, fallback
   }
 }
 
+/**
+ * Parses a YAML file and converts parser failures into project diagnostics.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - File being parsed.
+ * @param {string} source - Complete YAML source text.
+ * @param {object} [options] - Strict parser options such as embedded line offsets.
+ * @returns {object|null} Parsed strict YAML document, or `null` after a recorded failure.
+ */
 function parseYamlFile(diagnostics, file, source, options) {
   try {
     return parseStrictYaml(source, options);
@@ -313,6 +476,14 @@ function parseYamlFile(diagnostics, file, source, options) {
   }
 }
 
+/**
+ * Extracts and strictly parses YAML frontmatter from a Skill Markdown file.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - Skill file path.
+ * @param {string} source - Complete Skill Markdown content.
+ * @returns {object|null} Parsed frontmatter document, or `null` after a recorded failure.
+ */
 function parseFrontmatter(diagnostics, file, source) {
   const lines = source.split(/\r?\n/);
   if (lines[0] !== "---") {
@@ -333,6 +504,15 @@ function parseFrontmatter(diagnostics, file, source) {
   });
 }
 
+/**
+ * Validates one Skill's frontmatter, size limits, role protocol, and resource references.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} skillName - Canonical Skill directory name.
+ * @param {string} skillFile - Project-relative `SKILL.md` path.
+ * @param {string} source - Complete Skill Markdown content.
+ * @returns {object|null} Parsed frontmatter document when parsing succeeds; otherwise `null`.
+ */
 function validateSkill(diagnostics, skillName, skillFile, source) {
   const document = parseFrontmatter(diagnostics, skillFile, source);
   if (!document) return;
@@ -422,17 +602,6 @@ function validateSkill(diagnostics, skillName, skillFile, source) {
       ),
     );
   }
-  if (Object.hasOwn(document.value, "compatibility")) {
-    requireBoundedString(
-      diagnostics,
-      skillFile,
-      document,
-      document.value.compatibility,
-      ["compatibility"],
-      "SKILL_COMPATIBILITY",
-      { maximum: 500 },
-    );
-  }
   if (Object.hasOwn(document.value, "metadata")) {
     const metadata = document.value.metadata;
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -474,6 +643,15 @@ function validateSkill(diagnostics, skillName, skillFile, source) {
   }
 }
 
+/**
+ * Validates one Skill's Codex UI metadata and invocation policy.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} skillName - Canonical Skill name.
+ * @param {string} uiFile - Project-relative `agents/openai.yaml` path.
+ * @param {string} source - Complete UI metadata YAML.
+ * @returns {object|null} Parsed UI document when parsing succeeds; otherwise `null`.
+ */
 function validateUiMetadata(diagnostics, skillName, uiFile, source) {
   const document = parseYamlFile(diagnostics, uiFile, source);
   if (!document) return;
@@ -554,6 +732,13 @@ function validateUiMetadata(diagnostics, skillName, uiFile, source) {
   }
 }
 
+/**
+ * Validates the advisory agent-profile registry, capability declarations, and task-packet schema.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {object|null} document - Parsed strict YAML registry document.
+ * @returns {void} Appends every registry diagnostic without short-circuiting independent checks.
+ */
 function validateRegistry(diagnostics, document) {
   const file = REGISTRY_PATH;
   const registry = document.value;
@@ -562,15 +747,10 @@ function validateRegistry(diagnostics, document) {
     file,
     document,
     registry,
-    ["version", "enforcement", "profiles"],
+    ["enforcement", "profiles"],
     [],
     "REGISTRY_KEYS",
   );
-  if (registry.version !== 1) {
-    diagnostics.push(
-      makeDiagnostic(file, at(document, ["version"]), "REGISTRY_VERSION", "must equal 1"),
-    );
-  }
   if (registry.enforcement !== "advisory") {
     diagnostics.push(
       makeDiagnostic(
@@ -637,14 +817,23 @@ function validateRegistry(diagnostics, document) {
       [...profilePath, "route_when"],
       "PROFILE_ROUTE",
     );
-    requireString(
+    if (requireString(
       diagnostics,
       file,
       document,
       profile.write_scope,
       [...profilePath, "write_scope"],
       "PROFILE_WRITE_SCOPE",
-    );
+    ) && profile.write_scope !== expected.writeScope) {
+      diagnostics.push(
+        makeDiagnostic(
+          file,
+          at(document, [...profilePath, "write_scope"]),
+          "PROFILE_WRITE_SCOPE",
+          `expected '${expected.writeScope}'`,
+        ),
+      );
+    }
 
     const skillPath = [...profilePath, "skill"];
     if (
@@ -732,6 +921,19 @@ function validateRegistry(diagnostics, document) {
           ),
         );
       }
+      if (
+        Array.isArray(profile.capabilities.prohibited) &&
+        !profile.capabilities.prohibited.includes("task-state-write")
+      ) {
+        diagnostics.push(
+          makeDiagnostic(
+            file,
+            at(document, [...capabilityPath, "prohibited"]),
+            "TASK_STATE_CAPABILITY",
+            "must prohibit task-state-write for every ordinary role",
+          ),
+        );
+      }
     }
 
     if (
@@ -753,6 +955,18 @@ function validateRegistry(diagnostics, document) {
             "must contain at least one context field",
           ),
         );
+      }
+      for (const field of ["assignment-id", "capability-availability"]) {
+        if (!profile.context.includes(field)) {
+          diagnostics.push(
+            makeDiagnostic(
+              file,
+              at(document, [...profilePath, "context"]),
+              "CONTEXT_REQUIRED",
+              `must include '${field}' in every role packet context`,
+            ),
+          );
+        }
       }
       const duplicate = profile.context.find(
         (item, index) => profile.context.indexOf(item) !== index,
@@ -790,6 +1004,14 @@ function validateRegistry(diagnostics, document) {
   }
 }
 
+/**
+ * Extracts and validates the compact return envelope documented by a role Skill.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - Role Skill path.
+ * @param {string} source - Complete role Skill Markdown.
+ * @returns {void} Appends return-contract diagnostics.
+ */
 function validateRoleSkillReturn(diagnostics, file, source) {
   const lines = source.split(/\r?\n/);
   const heading = lines.findIndex((line) => line.trim() === "## Return to Main");
@@ -803,7 +1025,9 @@ function validateRoleSkillReturn(diagnostics, file, source) {
   const lineNumbers = [];
   for (let index = heading + 1; index < lines.length; index += 1) {
     if (/^##\s/.test(lines[index])) break;
-    const match = /^-\s+`([^`]+)`\s*:/.exec(lines[index]);
+    const bulletMatch = /^-\s+`?([^`:]+)`?\s*:/.exec(lines[index]);
+    const yamlMatch = /^([a-z][a-z0-9_-]*)\s*:/.exec(lines[index]);
+    const match = bulletMatch ?? yamlMatch;
     if (match) {
       labels.push(match[1]);
       lineNumbers.push(index + 1);
@@ -812,6 +1036,13 @@ function validateRoleSkillReturn(diagnostics, file, source) {
   validateReturnContract(diagnostics, file, labels, lineNumbers, heading + 1);
 }
 
+/**
+ * Validates the return-contract section in the bundled role task-packet asset.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} source - Complete role task-packet Markdown.
+ * @returns {void} Appends return-contract diagnostics for the asset.
+ */
 function validateTaskPacketReturn(diagnostics, source) {
   const file = TASK_PACKET_PATH;
   const lines = source.split(/\r?\n/);
@@ -826,7 +1057,9 @@ function validateTaskPacketReturn(diagnostics, source) {
   const lineNumbers = [];
   for (let index = heading + 1; index < lines.length; index += 1) {
     if (/^##\s/.test(lines[index])) break;
-    const match = /^-\s+([^:]+):/.exec(lines[index]);
+    const bulletMatch = /^-\s+`?([^`:]+)`?\s*:/.exec(lines[index]);
+    const yamlMatch = /^([a-z][a-z0-9_-]*)\s*:/.exec(lines[index]);
+    const match = bulletMatch ?? yamlMatch;
     if (match) {
       labels.push(match[1]);
       lineNumbers.push(index + 1);
@@ -835,6 +1068,95 @@ function validateTaskPacketReturn(diagnostics, source) {
   validateReturnContract(diagnostics, file, labels, lineNumbers, heading + 1);
 }
 
+/**
+ * Confirms that the Main Skill states Main-only task ownership and no-production-code boundaries.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - Main Skill path.
+ * @param {string} source - Main Skill Markdown.
+ * @returns {void} Appends semantic-contract diagnostics.
+ */
+function validateMainOnlySemantics(diagnostics, file, source) {
+  if (!/fork_turns\s*[":=]\s*["']?none["']?/i.test(source)) {
+    diagnostics.push(
+      makeDiagnostic(
+        file,
+        location(1, 1),
+        "EMPTY_HISTORY",
+        "must require every role and Child Main dispatch to set fork_turns to 'none' explicitly",
+      ),
+    );
+  }
+  if (
+    !/(?:only|sole|unique|single)[^\n]{0,100}(?:Main|owner)[^\n]{0,100}(?:index\.md|task state)|(?:Main|owner)[^\n]{0,100}(?:only|sole|unique|single)[^\n]{0,100}(?:index\.md|task state)/i.test(
+      source,
+    )
+  ) {
+    diagnostics.push(
+      makeDiagnostic(
+        file,
+        location(1, 1),
+        "MAIN_ONLY_STATE",
+        "must state that the owner Main is the only writer of its Work Item index/task state",
+      ),
+    );
+  }
+}
+
+/**
+ * Confirms that a role Skill forbids direct Work Item index mutation.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} file - Role Skill path.
+ * @param {string} source - Role Skill Markdown.
+ * @returns {void} Appends state-boundary diagnostics.
+ */
+function validateRoleStateBoundary(diagnostics, file, source) {
+  if (
+    !/(?:do not|must not|never|forbidden|prohibited)[^\n]{0,120}(?:index\.md|task (?:index|state))|(?:index\.md|task (?:index|state))[^\n]{0,120}(?:do not|must not|never|forbidden|prohibited)/i.test(
+      source,
+    )
+  ) {
+    diagnostics.push(
+      makeDiagnostic(
+        file,
+        location(1, 1),
+        "ROLE_STATE_WRITE",
+        "must explicitly prohibit the role from modifying Work Item indexes/task state",
+      ),
+    );
+  }
+}
+
+/**
+ * Confirms that the task-packet asset requires explicit empty-history dispatch and bounded context.
+ *
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @param {string} source - Complete role task-packet Markdown.
+ * @returns {void} Appends packet semantic diagnostics.
+ */
+function validateTaskPacketSemantics(diagnostics, source) {
+  const file = TASK_PACKET_PATH;
+  if (!/fork_turns\s*[":=]\s*["']?none["']?/i.test(source)) {
+    diagnostics.push(
+      makeDiagnostic(
+        file,
+        location(1, 1),
+        "EMPTY_HISTORY",
+        "must carry the explicit fork_turns: none dispatch requirement",
+      ),
+    );
+  }
+  validateRoleStateBoundary(diagnostics, file, source);
+}
+
+/**
+ * Orders diagnostics deterministically by file, line, column, code, and reason.
+ *
+ * @param {object} left - First diagnostic.
+ * @param {object} right - Second diagnostic.
+ * @returns {number} Negative, zero, or positive comparator result.
+ */
 function diagnosticSort(left, right) {
   return (
     left.file.localeCompare(right.file) ||
@@ -845,6 +1167,14 @@ function diagnosticSort(left, right) {
   );
 }
 
+/**
+ * Reads one required project file and records a missing-file diagnostic instead of throwing.
+ *
+ * @param {string} root - Repository root.
+ * @param {string} relativePath - Project-relative file path.
+ * @param {object[]} diagnostics - Mutable diagnostic collection.
+ * @returns {Promise<string|null>} UTF-8 content, or `null` when the file cannot be read.
+ */
 async function readProjectFile(root, relativePath, diagnostics) {
   try {
     return await readFile(path.join(root, relativePath), "utf8");
@@ -859,13 +1189,25 @@ async function readProjectFile(root, relativePath, diagnostics) {
   }
 }
 
+/**
+ * Formats one structured diagnostic for stable CLI output.
+ *
+ * @param {object} diagnostic - Diagnostic containing file, location, code, and reason.
+ * @returns {string} Single-line human-readable diagnostic.
+ */
 export function formatDiagnostic(diagnostic) {
   return `${diagnostic.file}:${diagnostic.line}:${diagnostic.column} [${diagnostic.code}] ${diagnostic.reason}`;
 }
 
+/**
+ * Validates all canonical Skills, UI metadata, resources, and advisory agent profiles.
+ *
+ * @param {string} root - Repository root containing `.agents/skills`.
+ * @returns {Promise<{ok: boolean, diagnostics: object[], summary: object}>} Overall validity, sorted diagnostics, and checked-resource counts.
+ */
 export async function checkAgentProfiles(root) {
   const diagnostics = [];
-  const files = [REGISTRY_PATH, TASK_PACKET_PATH];
+  const files = [...MAIN_RESOURCE_PATHS];
   for (const skillName of SKILL_NAMES) {
     files.push(`.agents/skills/${skillName}/SKILL.md`);
     files.push(`.agents/skills/${skillName}/agents/openai.yaml`);
@@ -892,8 +1234,11 @@ export async function checkAgentProfiles(root) {
     const uiSource = sourceByFile.get(uiFile);
     if (skillSource !== null) {
       validateSkill(diagnostics, skillName, skillFile, skillSource);
-      if (skillName !== "orchestrate-engineering-team") {
+      if (skillName === "orchestrate-engineering-team") {
+        validateMainOnlySemantics(diagnostics, skillFile, skillSource);
+      } else {
         validateRoleSkillReturn(diagnostics, skillFile, skillSource);
+        validateRoleStateBoundary(diagnostics, skillFile, skillSource);
       }
     }
     if (uiSource !== null) {
@@ -902,7 +1247,10 @@ export async function checkAgentProfiles(root) {
   }
 
   const taskPacket = sourceByFile.get(TASK_PACKET_PATH);
-  if (taskPacket !== null) validateTaskPacketReturn(diagnostics, taskPacket);
+  if (taskPacket !== null) {
+    validateTaskPacketReturn(diagnostics, taskPacket);
+    validateTaskPacketSemantics(diagnostics, taskPacket);
+  }
 
   diagnostics.sort(diagnosticSort);
   return {
@@ -912,7 +1260,7 @@ export async function checkAgentProfiles(root) {
       skills: SKILL_NAMES.length,
       uiMetadataFiles: SKILL_NAMES.length,
       profiles: Object.keys(ROLE_PROFILES).length,
-      returnContracts: Object.keys(ROLE_PROFILES).length + 2,
+      returnContracts: Object.keys(ROLE_PROFILES).length * 2 + 1,
     },
   };
 }

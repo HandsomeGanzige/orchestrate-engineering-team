@@ -20,7 +20,7 @@ body:
   - type: textarea
     id: boundaries
     attributes:
-      label: Compatibility and authority impact
+      label: Runtime and authority impact
       description: Note new runtimes, permissions, role authority, or packaging surfaces.
     validations:
       required: true

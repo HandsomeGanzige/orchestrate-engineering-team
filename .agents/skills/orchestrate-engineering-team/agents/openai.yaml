@@ -1,7 +1,7 @@
 interface:
   display_name: "Engineering Team Orchestrator"
-  short_description: "Coordinate hierarchical engineering delivery workflows"
-  default_prompt: "Use $orchestrate-engineering-team to start or resume an engineering work item."
+  short_description: "Coordinate complex engineering Work Items and roles"
+  default_prompt: "Use $orchestrate-engineering-team to coordinate or resume this multi-role engineering Work Item."
 
 policy:
   allow_implicit_invocation: true

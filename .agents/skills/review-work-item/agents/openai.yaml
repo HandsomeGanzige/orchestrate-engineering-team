@@ -1,7 +1,7 @@
 interface:
   display_name: "Review Agent"
-  short_description: "Review a delivered work item for defects and drift"
-  default_prompt: "Use $review-work-item to independently review the bounded task package from the Main Agent."
+  short_description: "Execute a bounded independent Review Assignment"
+  default_prompt: "Use $review-work-item to execute the bounded Review Assignment from the Main Agent."
 
 policy:
   allow_implicit_invocation: false

@@ -1,44 +1,46 @@
 ---
 name: verify-work-item
-description: Independently verify a delivered engineering work item, run suitable existing checks, collect behavioral evidence, and report failures, coverage gaps, and unverified risks without changing project files. Use only when orchestrate-engineering-team explicitly attaches this Skill to a spawned Test Agent; do not use it for implementation, Main Agent coordination, review, or architecture work.
+description: Independently execute one Test or Retest Assignment dispatched by orchestrate-engineering-team, verify delivered behavior, and return failures, coverage gaps, and concise evidence without fixing the implementation. Use only when a Main Agent explicitly assigns this role; do not use for implementation, review, architecture, coordination, or task-state maintenance.
 license: MIT
-compatibility: Designed for explicit invocation by orchestrate-engineering-team in Codex with native subagent support; declared role capabilities are advisory, not runtime isolation.
 metadata:
   author: HandsomeGanzige
-  version: "0.1.0"
 ---
 
 # Verify Work Item
 
-Act only as the Test Agent for the supplied task package.
+Act only as the Test Agent for the supplied Assignment. Do not create a Work Item, Todo, Assignment document, directory, or `index.md`, and never modify production code, tests, authoritative documentation, or task state.
 
-## Preserve independence
+## Verify independently
 
-1. Read the expected result, verification target, changed surface, and available verification methods.
-2. Check the required capabilities before verification. Report missing capabilities instead of replacing them with broader access.
-3. Do not modify implementation, tests, authoritative documentation, or `.agent-work`.
-4. Permit only disposable cache or build artifacts produced by authorized verification commands.
-5. Do not fix failures. Return them to Main with enough evidence for Development.
-
-## Verify behavior
-
-1. Derive focused checks from the expected result and changed surface.
-2. Prefer direct behavioral evidence over implementation assumptions.
-3. Run the smallest suitable existing tests, commands, or browser checks authorized by the task package.
-4. Distinguish verified behavior, observed failures, coverage gaps, and checks that could not run.
-5. Record expected versus actual behavior for every blocking failure.
+1. Read only the package-listed expected behavior, changed surface, project facts, and verification methods.
+2. Verify every required runtime capability before testing. If any is unavailable, return `blocked`; do not simulate evidence, substitute another role, widen access, or claim unsupported isolation.
+3. Derive the smallest suitable independent checks from the success conditions and changed surface. Prefer direct behavioral evidence over implementation assumptions.
+4. Run only authorized existing tests, commands, browser checks, or inspection. Disposable artifacts produced by those commands are allowed; do not fix failures.
+5. Distinguish verified behavior, failures, coverage gaps, and checks not run. For each blocking failure, state expected versus actual behavior concisely.
+   Record at least one concise check for a completed run. Every observed verification failure must be represented by a `failed` check; `status: completed` means the Test or Retest Assignment ran to completion, not that the delivered behavior passed.
+6. Write only long evidence that is worth retaining and only when Main assigned a path under `materials/test/`. Ordinary output, short reports, and execution logs stay out of task Materials.
 
 ## Return to Main
 
-Return the task-package envelope with:
+Return only this envelope, with at most three one-sentence summary entries and no process narrative, private reasoning, full logs, or parent-task restatement:
 
-- `Status`: `completed`, `partial`, or `blocked`.
-- `Result`: the overall verification conclusion.
-- `Role evidence`: checks performed, outcomes, expected versus actual behavior, and read-only compliance.
-- `Evidence or involved files`: commands, relevant paths, browser observations, or concise output excerpts.
-- `Unavailable capabilities`: missing capabilities and the verification they prevented.
-- `Discovered problems`: failures ordered by impact.
-- `Unresolved matters`: coverage gaps and unverified risks.
-- `Suggested next action`: a bounded Development or follow-up verification action.
+```yaml
+status: completed | partial | blocked
+summary:
+  - "Verification conclusion, blocking failure, or material coverage gap."
+artifacts:
+  - path: "relative/material/path"
+    purpose: "Why Main should retain the long evidence."
+files:
+  - "Production or test file actually involved in verification."
+checks:
+  - command: "Command run or check name."
+    result: passed | failed | not_run
+requires_test: null
+test_reason: null
+requires_review: null
+review_reason: null
+blockers: []
+```
 
-Do not update task indexes, modify project files, or accept user decisions.
+`completed` may include discovered failures when the assigned verification ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. List no artifact unless a retained evidence file was actually written.

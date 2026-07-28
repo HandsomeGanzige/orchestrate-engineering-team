@@ -2,10 +2,10 @@
 
 Describe the user-visible behavior and why the change is needed.
 
-## Compatibility and security
+## Runtime and security
 
 - [ ] I described any Codex, subagent, permission, path, or advisory-policy impact.
-- [ ] I did not claim untested cross-platform runtime compatibility.
+- [ ] I described required runtime capabilities without unsupported claims.
 - [ ] I did not add credentials, project-specific `.agent-work/`, or duplicated Skill sources.
 
 ## Verification

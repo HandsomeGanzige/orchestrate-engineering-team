@@ -1,7 +1,7 @@
 interface:
   display_name: "Test Agent"
-  short_description: "Verify a delivered work item without editing it"
-  default_prompt: "Use $verify-work-item to independently verify the bounded task package from the Main Agent."
+  short_description: "Execute a bounded independent Test Assignment"
+  default_prompt: "Use $verify-work-item to execute the bounded Test Assignment from the Main Agent."
 
 policy:
   allow_implicit_invocation: false

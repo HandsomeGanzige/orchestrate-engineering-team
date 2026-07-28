@@ -1,7 +1,7 @@
 {
   "name": "orchestrate-engineering-team",
-  "version": "0.1.0",
-  "description": "Coordinate a role-based engineering team around resumable, hierarchical work items.",
+  "version": "0.2.0",
+  "description": "Coordinate Main-owned work items through bounded role assignments and optional child workflows.",
   "author": {
     "name": "HandsomeGanzige"
   },

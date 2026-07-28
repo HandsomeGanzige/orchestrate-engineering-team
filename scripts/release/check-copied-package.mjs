@@ -10,6 +10,7 @@ import {
   formatDiagnostic,
   parseStrictYaml,
 } from "../agent-profiles/checker.mjs";
+import { assertBundledWorkflowImportClosure } from "./workflow-import-closure.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const EXPECTED_SKILLS = Object.freeze([
@@ -19,8 +20,49 @@ const EXPECTED_SKILLS = Object.freeze([
   "review-work-item",
   "verify-work-item",
 ]);
+const EXPECTED_MAIN_RESOURCES = Object.freeze([
+  "assets/role-task-packet.md",
+  "assets/work-item-index.md",
+  "assets/workspace-index.md",
+  "references/agent-profiles.yaml",
+  "references/state-and-voting.md",
+]);
+const EXPECTED_WORKFLOW_EXPORTS = Object.freeze([
+  "LEASE_MINUTES",
+  "WorkflowError",
+  "assignmentCommand",
+  "childSync",
+  "claimWork",
+  "computeVotes",
+  "createWork",
+  "decisionCommand",
+  "findCommand",
+  "handoffCommand",
+  "initWorkspace",
+  "listCommand",
+  "loadInput",
+  "materialCommand",
+  "mutateWork",
+  "packetCommand",
+  "parseCli",
+  "releaseWork",
+  "resultCommand",
+  "runCli",
+  "scopesConflict",
+  "todoCommand",
+  "validateRoleResult",
+  "validateWorkspace",
+  "voteCommand",
+  "workCommand",
+]);
 const EXCLUDED_TOP_LEVEL = new Set([".agent-work", ".git", "node_modules"]);
 
+/**
+ * Reads and parses one required JSON file with path-aware failure context.
+ *
+ * @param {string} file - JSON file path.
+ * @returns {Promise<unknown>} Parsed JSON value.
+ */
 async function readJson(file) {
   try {
     return JSON.parse(await readFile(file, "utf8"));
@@ -29,11 +71,28 @@ async function readJson(file) {
   }
 }
 
+/**
+ * Asserts that an object contains exactly an expected key set.
+ *
+ * @param {unknown} value - Candidate object.
+ * @param {string[]} expected - Exact allowed keys.
+ * @param {string} label - Human-readable assertion label.
+ * @returns {void} Returns when object shape is exact.
+ */
 function exactKeys(value, expected, label) {
   assert.ok(value && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
   assert.deepEqual(Object.keys(value).sort(), [...expected].sort(), `${label} keys changed`);
 }
 
+/**
+ * Resolves a manifest-relative bundled path while preventing directory escape.
+ *
+ * @param {string} root - Bundle boundary root.
+ * @param {string} relativePath - Manifest path beginning with `./`.
+ * @param {string} label - Human-readable assertion label.
+ * @param {{allowRoot?: boolean}} [options] - Whether resolving exactly to the root is permitted.
+ * @returns {string} Safe absolute path inside the bundle.
+ */
 function resolveBundledPath(root, relativePath, label, { allowRoot = false } = {}) {
   assert.equal(typeof relativePath, "string", `${label} must be a string`);
   assert.ok(relativePath.startsWith("./"), `${label} must start with './'`);
@@ -45,12 +104,67 @@ function resolveBundledPath(root, relativePath, label, { allowRoot = false } = {
   return resolved;
 }
 
+/**
+ * Imports and executes the copied workflow facade against a disposable runtime workspace.
+ *
+ * @param {string} mainSkillRoot - Copied Main Skill directory.
+ * @param {string} temporaryRoot - Disposable root used for runtime state.
+ * @returns {Promise<void>} Resolves after init, create, and validate commands pass.
+ */
+async function assertCopiedWorkflowRuns(mainSkillRoot, temporaryRoot) {
+  const corePath = path.join(mainSkillRoot, "scripts/workflow-core.mjs");
+  const workflow = await import(pathToFileURL(corePath).href);
+  assert.deepEqual(
+    Object.keys(workflow).sort(),
+    [...EXPECTED_WORKFLOW_EXPORTS].sort(),
+    "workflow-core.mjs export surface changed",
+  );
+  const runtimeRoot = path.join(temporaryRoot, "workflow-runtime-smoke");
+  const now = new Date("2026-07-28T00:00:00.000Z");
+  await workflow.runCli(["init", "--root", runtimeRoot], { now });
+  await workflow.runCli([
+    "create",
+    "--root",
+    runtimeRoot,
+    "--id",
+    "copied-runtime",
+    "--name",
+    "Copied runtime",
+    "--summary",
+    "Exercises the copied transitive runtime graph.",
+    "--keywords",
+    '["copied","runtime","smoke"]',
+    "--type",
+    "delivery",
+    "--goal",
+    "Exercise copied runtime modules.",
+    "--success-criteria",
+    '["Copied commands execute."]',
+  ], { now });
+  assert.deepEqual(
+    await workflow.runCli(["validate", "--root", runtimeRoot], { now }),
+    { valid: true, checked: 1, errors: [] },
+  );
+}
+
+/**
+ * Copies the publishable repository surface and validates the package in isolation.
+ *
+ * @param {string} [sourceRoot=PROJECT_ROOT] - Source repository root to copy.
+ * @returns {Promise<{plugin: string, version: string, skills: number, profiles: number}>} Validated package summary.
+ */
 export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "orchestrate-package-"));
   const marketplaceRoot = path.join(temporaryRoot, "marketplace");
   try {
     await cp(sourceRoot, marketplaceRoot, {
       recursive: true,
+      /**
+       * Excludes local state, Git metadata, and installed dependencies from the copied package.
+       *
+       * @param {string} source - Current source path visited by `fs.cp`.
+       * @returns {boolean} Whether the path belongs in the disposable package copy.
+       */
       filter(source) {
         const relative = path.relative(sourceRoot, source);
         const topLevel = relative.split(path.sep)[0];
@@ -85,7 +199,7 @@ export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
 
     const manifest = await readJson(path.join(pluginRoot, ".codex-plugin/plugin.json"));
     assert.equal(manifest.name, listing.name);
-    assert.equal(manifest.version, "0.1.0");
+    assert.equal(manifest.version, "0.2.0");
     assert.equal(manifest.license, "MIT");
     assert.equal(
       manifest.repository,
@@ -104,6 +218,12 @@ export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
         access(path.join(skillsRoot, skill, "agents/openai.yaml")),
       ]),
     );
+    const mainSkillRoot = path.join(skillsRoot, "orchestrate-engineering-team");
+    await Promise.all(
+      EXPECTED_MAIN_RESOURCES.map((resource) => access(path.join(mainSkillRoot, resource))),
+    );
+    await assertBundledWorkflowImportClosure(path.join(mainSkillRoot, "scripts"));
+    await assertCopiedWorkflowRuns(mainSkillRoot, temporaryRoot);
 
     const registryPath = path.join(
       skillsRoot,
@@ -126,7 +246,13 @@ export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
     const packageMetadata = await readJson(path.join(pluginRoot, "package.json"));
     assert.equal(packageMetadata.private, true);
     assert.equal(packageMetadata.version, manifest.version);
+    assert.equal(
+      Object.hasOwn(packageMetadata, "dependencies"),
+      false,
+      "the packaged workflow must not gain npm runtime dependencies",
+    );
     assert.match(await readFile(path.join(pluginRoot, "LICENSE"), "utf8"), /MIT License/);
+    await access(path.join(pluginRoot, "docs/acceptance-report.md"));
 
     return {
       plugin: manifest.name,
@@ -139,6 +265,11 @@ export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
   }
 }
 
+/**
+ * Runs the copied-package check and prints a concise success summary.
+ *
+ * @returns {Promise<void>} Resolves after package validation and logging complete.
+ */
 export async function main() {
   const summary = await checkCopiedPackage();
   console.log(

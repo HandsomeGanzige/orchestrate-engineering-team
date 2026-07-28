@@ -3,4 +3,5 @@
 coverage/
 node_modules/
 .pnpm-store/
-docs/
+docs/*
+!docs/acceptance-report.md

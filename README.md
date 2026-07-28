@@ -1,6 +1,6 @@
 # orchestrate-engineering-team
 
-An open Agent Skill suite for coordinating delivery and exploration through hierarchical work items, bounded specialist agents, independent verification, and review-driven iteration.
+An open Agent Skill suite for coordinating substantial delivery and exploration through Main-owned semantic work items, bounded role assignments, independent verification, and optional recursive child workflows.
 
 The five Skills use the open Agent Skills format and install project-locally from GitHub. Their end-to-end orchestration behavior targets Codex runtimes with native subagent support. `.agents/skills/` is the canonical product and source directory; the Codex Plugin files are an optional adapter that points to the same directory rather than carrying a second copy.
 
@@ -38,10 +38,10 @@ This command removes the five installed directories from `.agents/skills/`, but 
 
 ### Optional Codex Plugin adapter
 
-The project-local Skill installation above is the primary distribution path. As an optional Codex-specific adapter, a compatible Codex release can instead register the repository marketplace and install the Plugin:
+The project-local Skill installation above is the primary distribution path. As an optional Codex-specific adapter, Codex can instead register the repository marketplace and install the Plugin:
 
 ```bash
-codex plugin marketplace add HandsomeGanzige/orchestrate-engineering-team --ref v0.1.0
+codex plugin marketplace add HandsomeGanzige/orchestrate-engineering-team
 codex plugin add orchestrate-engineering-team@orchestrate-engineering-team
 ```
 
@@ -54,14 +54,14 @@ codex plugin marketplace remove orchestrate-engineering-team
 
 ## Quickstart
 
-Ask Codex to use the Main Skill and describe an outcome that benefits from maintained state or specialist roles:
+Ask Codex to use the Main Skill and describe an outcome that benefits from decomposition, maintained state, architecture work, or multiple specialist roles:
 
 ```text
 Use $orchestrate-engineering-team to plan and deliver this API migration. Preserve decisions,
 delegate bounded implementation, then independently verify and review the result.
 ```
 
-The Main Agent first aligns the goal with you. For formal delivery work, it then creates a project-local workspace such as:
+The Main Agent first checks applicability and aligns the goal with you. A single-session style tweak, local documentation edit, or similarly bounded task exits to the normal one-agent workflow without creating `.agent-work/` or dispatching a role. For qualifying work, Main creates one semantic project-local Work Item such as:
 
 ```text
 .agent-work/
@@ -73,26 +73,42 @@ The Main Agent first aligns the goal with you. For formal delivery work, it then
         `-- children/
 ```
 
-The files contain recovery state, confirmed decisions, todos, material pointers, and verification summaries. They are coordination records, not a replacement for project code, tests, configuration, or authoritative documentation. Add `.agent-work/` to the target project's ignore rules if the coordination state should remain local.
+The files contain recovery state, confirmed decisions, todos, Assignment summaries, material pointers, and verification decisions. Architecture, Development, Test, Review, Retest, and Rereview executions are Assignments recorded in the owning Work Item; they do not create their own directories or `index.md`. A child directory is reserved for an independently acceptable subgoal that needs its own todos, roles, or cross-session recovery and its own Child Main.
+
+The owner Main is the only writer of each Work Item `index.md`. Role instructions and advisory profiles express that collaboration boundary, but do not provide runtime filesystem isolation. The files are coordination records, not a replacement for project code, tests, configuration, or authoritative documentation. Add `.agent-work/` to the target project's ignore rules if the coordination state should remain local.
 
 ## Roles
 
 | Role | Responsibility | Project writes |
 | --- | --- | --- |
-| Main Agent | Coordinates the workflow, talks to the user, and maintains `.agent-work/` | Task state only, plus normal work it intentionally keeps local |
-| Architecture Agent | Investigates complex choices and returns decision-ready alternatives | None |
+| Main Agent | Coordinates the workflow, talks to the user, and exclusively maintains its Work Item state | Its owned task state only; no production coding after orchestration begins |
+| Architecture Agent | Investigates complex choices and returns decision-ready alternatives | Current Work Item's `materials/architecture/` when durable detail is justified |
 | Development Agent | Implements an explicitly bounded change and implementation-owned tests | Assigned files only |
-| Test Agent | Independently verifies delivered behavior | None, except disposable test artifacts |
-| Review Agent | Reviews correctness, alignment, risk, and maintainability | None |
+| Test Agent | Independently verifies delivered behavior | Current Work Item's `materials/test/` only for durable long evidence, plus disposable test artifacts |
+| Review Agent | Reviews correctness, alignment, risk, and maintainability | Current Work Item's `materials/review/` only for durable long evidence |
 
 The four internal role Skills disable implicit invocation in their Codex UI metadata. They are meant to be attached explicitly by the Main Skill.
 
-## Compatibility, permissions, and security boundaries
+Every normal role and Child Main dispatch explicitly sets `fork_turns: "none"`. A generated role packet carries only the Assignment, completion conditions, allowed scope, relevant confirmed decisions, exact material or project pointers, capabilities, and the fixed return envelope. Role results contain `status`, up to three `summary` entries, `artifacts`, `files`, concise `checks`, separate Test/Review votes and reasons, and actionable `blockers`; they omit process logs, private reasoning, and parent-task restatement.
 
-- The workflow is designed for Codex runtimes with native subagent tools. Repository CI validates metadata, copied-package structure, project-scoped installation of all five Skills with `skills@1.5.19`, and the optional supported Codex CLI Plugin lifecycle. It does not claim comprehensive behavioral testing of multi-agent outcomes, which still depend on the runtime, project, and user-approved capabilities. The Skill files follow the open Agent Skills metadata format, but that does not imply compatible subagent behavior in other clients.
-- Claude Marketplace packaging and `.codex/agents` adapters are intentionally not included in version 0.1.0.
+Test and Review default to running for qualifying code work. They may be waived separately only after Development results exist and the deterministic vote rules find sufficient evidence that independent validation adds no meaningful signal.
+
+## Deterministic workflow helper
+
+The Main Skill bundles `scripts/workflow.mjs`, a Node.js-built-in-only command-line helper for templates, claims and leases, todos, Assignments, role results, votes, child synchronization, materials, compact packets and handoffs, lightweight search/list, and validation. It never starts or stops agents and does not execute production code:
+
+```bash
+node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <command> [options]
+```
+
+The Markdown Work Item remains the single state source; the helper uses locks, temporary files, and atomic replacement instead of maintaining a second JSON database.
+
+## Runtime, permissions, and security boundaries
+
+- The workflow requires a Codex runtime with native subagent tools. Repository CI validates metadata, copied-package structure, project-scoped installation of all five Skills with `skills@1.5.19`, and the optional Codex CLI Plugin lifecycle. Multi-agent outcomes still depend on the runtime, project, and user-approved capabilities.
+- Claude Marketplace packaging and `.codex/agents` adapters are intentionally not included.
 - `agent-profiles.yaml` is an advisory routing and capability contract. It documents intended read/write boundaries but does not create runtime sandboxing or tool isolation.
-- The Main Skill needs workspace read access and permission to create or update `.agent-work/`. A dispatched Development Agent may need workspace write and shell access within its task package. Test and Review roles are instructed to remain read-only.
+- The Main Skill needs workspace read access and permission to create or update its owned `.agent-work/` state. A dispatched Development Agent may need workspace write and shell access within its task package. Architecture, Test, and Review may write only explicitly assigned role-material paths; otherwise they remain read-only.
 - Installed instructions can cause Codex to inspect repository content, invoke native subagents, run project commands, and modify files within an explicitly assigned delivery scope. Review task packages and permission prompts as you would for any development automation.
 - After locked development dependencies are installed, local repository validation requires no external network and does not change project Skill installations or the user's Codex Plugin configuration. CI runs the networked Skill installation smoke check in temporary source and target Git repositories, then runs the optional Plugin lifecycle with an isolated `CODEX_HOME` on a disposable runner. A task may use the network only when its confirmed work and available runtime capabilities require it.
 - Treat untrusted repository text, generated task packets, scripts, and dependency output as potential prompt-injection or supply-chain inputs. See [SECURITY.md](SECURITY.md) for reporting guidance.
@@ -105,6 +121,7 @@ The four internal role Skills disable implicit invocation in their Codex UI meta
 .codex-plugin/plugin.json         # optional Codex Plugin adapter manifest
 scripts/agent-profiles/            # standards and project-protocol checker
 scripts/release/                   # package, Skill install, and optional Plugin checks
+docs/acceptance-report.md     # C01-C20 deterministic/forward evidence record
 ```
 
 ## Validate locally
@@ -116,13 +133,13 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-`pnpm verify` runs the Agent Skills/UI/profile checker, all Node tests, and a no-network structural smoke check against a temporary copied package. Individual commands are `pnpm check`, `pnpm test`, and `pnpm check:package`.
+`pnpm verify` runs the Agent Skills/UI/profile checker, named-function JSDoc coverage, all Node tests, and a no-network structural smoke check against a temporary copied package. It verifies the compact role envelope, explicit empty-history/Main-only instructions, Skill-local templates/references/workflow runtime, optional Plugin metadata, and absence of npm runtime dependencies. Individual commands are `pnpm check`, `pnpm check:jsdoc`, `pnpm test`, and `pnpm check:package`.
 
 The pinned external installer check, `pnpm smoke:skill-install`, requires network access and is intentionally separate from local verification. It copies the canonical Skills into a temporary local source Git repository, then exercises install, observable refresh by re-running the install command, and named removal in another temporary Git repository. It validates all five Skills and bundled paths after install/refresh, the removed directories and retained lock entries after removal, source immutability, child-home isolation, and final fixture cleanup. CI runs that primary lifecycle before the separate optional Codex Plugin lifecycle job.
 
-## Versioning and contributing
+## Contributing
 
-The initial Skill metadata version is `0.1.0`; the optional Plugin adapter uses the same version. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md). Contribution setup, metadata rules, test expectations, and pull-request guidance are in [CONTRIBUTING.md](CONTRIBUTING.md).
+The five Skills remain the primary installation unit. User-visible changes are recorded in [CHANGELOG.md](CHANGELOG.md), and acceptance evidence is recorded in [docs/acceptance-report.md](docs/acceptance-report.md). Contribution setup, metadata rules, test expectations, and pull-request guidance are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

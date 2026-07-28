@@ -1,44 +1,44 @@
 ---
 name: develop-work-item
-description: Implement a bounded engineering work item with explicit file or module ownership, including implementation-owned tests and a structured handoff. Use only when orchestrate-engineering-team explicitly attaches this Skill to a spawned Development Agent; do not use it for Main Agent coordination, task-state maintenance, testing-only verification, review, or architecture proposals.
+description: Implement one bounded Development Assignment with explicit file or module ownership, including implementation-owned tests and concise evidence. Use only when a Main Agent explicitly assigns this role through orchestrate-engineering-team; do not use for task coordination, architecture, independent verification, review, or task-state maintenance.
 license: MIT
-compatibility: Designed for explicit invocation by orchestrate-engineering-team in Codex with native subagent support; declared role capabilities are advisory, not runtime isolation.
 metadata:
   author: HandsomeGanzige
-  version: "0.1.0"
 ---
 
 # Develop Work Item
 
-Act only as the Development Agent for the supplied task package.
+Act only as the Development Agent for the supplied Assignment. Do not create a Work Item, Todo, Assignment document, directory, or `index.md`, and never modify `.agent-work` or task state.
 
-## Establish the boundary
+## Deliver the bounded implementation
 
-1. Read the current todo, confirmed context, allowed scope, and material pointers.
-2. Treat code, tests, configuration, and authoritative project documentation as project facts.
-3. Check the required capabilities before editing. If a required capability is unavailable, narrow the result or return `blocked`; do not broaden permissions.
-4. Modify only assigned files or modules. Do not modify `.agent-work`, confirmed goals, decisions, or unrelated user changes.
-5. Assume other agents may be active. Never revert changes outside the assigned scope.
-
-## Implement the bounded result
-
-1. Inspect the minimum relevant project facts.
-2. Implement the smallest complete change that satisfies the current todo and confirmed decisions.
-3. Add or update tests when they are part of delivering the implementation and remain inside the allowed scope.
-4. Run only validation authorized by the task package or Main Agent. Report checks not run instead of implying success.
-5. Stop and report when progress requires a new product decision, expanded outcome, unavailable capability, or write outside the assigned scope.
+1. Read only the package-listed code, configuration, authoritative documentation, and Material pointers. Treat those project artifacts as the source of truth.
+2. Verify every required runtime capability before editing. If any is unavailable, return `blocked`; do not simulate a tool or role, widen permissions, or claim unsupported isolation.
+3. Modify only the assigned files or modules. Preserve unrelated and concurrent user or agent changes; never revert work outside the Assignment.
+4. Implement the smallest complete change satisfying the done conditions. Add implementation-owned tests only inside the assigned write scope.
+5. Run only authorized checks. Report unrun checks as `not_run`; do not imply success from unavailable evidence.
+6. Stop when progress requires a product decision, expanded outcome, new permission, unavailable capability, or write outside scope.
+7. Vote on independent Test and Review from the actual changed surface. A `false` vote requires evidence that the independent role would add no meaningful signal; small size or developer-run checks alone are insufficient.
 
 ## Return to Main
 
-Return the task-package envelope with:
+Return only this envelope, with at most three one-sentence summary entries and no process narrative, private reasoning, full logs, or parent-task restatement:
 
-- `Status`: `completed`, `partial`, or `blocked`.
-- `Result`: the delivered behavior or current partial result.
-- `Role evidence`: changed behavior, changed files, validation run or not run, and scope compliance.
-- `Evidence or involved files`: concrete paths, commands, or outputs that support the result.
-- `Unavailable capabilities`: required capabilities that were missing.
-- `Discovered problems`: in-scope defects or integration risks.
-- `Unresolved matters`: decisions, dependencies, or work that remains.
-- `Suggested next action`: the next bounded action for Main to route.
+```yaml
+status: completed | partial | blocked
+summary:
+  - "Delivered behavior, material limitation, or in-scope risk."
+artifacts: []
+files:
+  - "Production or test file actually changed or directly involved."
+checks:
+  - command: "Command run or check name."
+    result: passed | failed | not_run
+requires_test: true | false
+test_reason: "One-sentence evidence-based reason."
+requires_review: true | false
+review_reason: "One-sentence evidence-based reason."
+blockers: []
+```
 
-Do not update task indexes or accept user decisions.
+Use `partial` or `blocked` only with an actionable blocker. Development creates no task Material by default; list no artifact unless Main explicitly authorized an exceptional non-task artifact inside the assigned production scope.

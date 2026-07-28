@@ -1,71 +1,120 @@
 ---
-id: ""
-parent: ""
-type: "delivery"
+id: ⟪ORCHESTRATE:WORK_ID_JSON:6D71B11E⟫
+name: ⟪ORCHESTRATE:WORK_NAME_JSON:6D71B11E⟫
+summary: ⟪ORCHESTRATE:WORK_SUMMARY_JSON:6D71B11E⟫
+keywords: ⟪ORCHESTRATE:WORK_KEYWORDS_JSON:6D71B11E⟫
+type: ⟪ORCHESTRATE:WORK_TYPE_JSON:6D71B11E⟫
 status: "active"
-phase: "explore"
-updated: ""
+stage: ⟪ORCHESTRATE:WORK_STAGE_JSON:6D71B11E⟫
+parent: ⟪ORCHESTRATE:WORK_PARENT_JSON:6D71B11E⟫
+owner: ""
+lease_until: ""
+updated_at: ⟪ORCHESTRATE:WORK_UPDATED_AT_JSON:6D71B11E⟫
 ---
 
-# Work item: <name>
+# ⟪ORCHESTRATE:WORK_TITLE_TEXT:6D71B11E⟫
 
-## Confirmed goal
+## Goal
 
-<!-- Write only after explicit user confirmation. -->
+<!-- workflow:goal:start -->
+```json
+⟪ORCHESTRATE:WORK_GOAL_JSON:6D71B11E⟫
+```
+<!-- workflow:goal:end -->
 
-## Expected result
+## Success criteria
 
-<!-- Write only after explicit user confirmation. -->
+<!-- workflow:success_criteria:start -->
+```json
+⟪ORCHESTRATE:WORK_SUCCESS_CRITERIA_JSON:6D71B11E⟫
+```
+<!-- workflow:success_criteria:end -->
 
 ## Confirmed decisions
 
-<!-- Record only decisions explicitly confirmed by the user. -->
-
-None yet.
+<!-- workflow:confirmed_decisions:start -->
+```json
+[]
+```
+<!-- workflow:confirmed_decisions:end -->
 
 ## Current progress
 
-<!-- Main Agent-maintained recovery snapshot. Keep concise. -->
-
-- Current: Explore relevant project context
-- Recently completed: Goal and expected result confirmed
-- Next: Identify relevant code and materials
+<!-- workflow:current_progress:start -->
+```json
+""
+```
+<!-- workflow:current_progress:end -->
 
 ## Todo
 
-<!-- Main Agent-maintained. Use [ ] todo, [>] in progress, and [x] done. -->
+<!-- workflow:todo:start -->
+```json
+[
+  {
+    "id": "align-goal",
+    "text": "Confirm goal, success criteria, and boundaries.",
+    "status": "in_progress",
+    "assignment": "",
+    "blockers": []
+  }
+]
+```
+<!-- workflow:todo:end -->
 
-- [>] Explore relevant project context
+## Assignments
 
-## Child work items
+<!-- workflow:assignments:start -->
+```json
+[]
+```
+<!-- workflow:assignments:end -->
 
-<!-- Main Agent-maintained links, statuses, and concise child results. -->
+## Children
 
-None.
+<!-- workflow:children:start -->
+```json
+[]
+```
+<!-- workflow:children:end -->
 
-## Pending discussion
+## Materials
 
-<!-- Questions and proposals are not decisions. -->
+<!-- workflow:materials:start -->
+```json
+[]
+```
+<!-- workflow:materials:end -->
 
-None.
+## Verification decision and evidence
 
-## Context and materials
-
-<!-- Link useful project facts or local materials and explain relevance. -->
-
-None.
-
-## Verification
-
-<!-- Current evidence only. Put useful detailed evidence in materials/ and link it. -->
-
-- Verified: None yet
-- Unverified: Current work item outcome
-- Problems found: None
+<!-- workflow:verification:start -->
+```json
+{
+  "votes": {
+    "architecture": null,
+    "development": [],
+    "main": null
+  },
+  "decisions": {
+    "test": null,
+    "review": null
+  }
+}
+```
+<!-- workflow:verification:end -->
 
 ## Result
 
-<!-- Main Agent-maintained when the work item reaches an outcome. -->
-
-Not completed.
-
+<!-- workflow:result:start -->
+```json
+{
+  "status": "pending",
+  "summary": [],
+  "artifacts": [],
+  "blockers": [],
+  "next_action": "",
+  "success_evidence": []
+}
+```
+<!-- workflow:result:end -->

@@ -1,7 +1,7 @@
 interface:
   display_name: "Architecture Agent"
-  short_description: "Design a technical solution for a complex work item"
-  default_prompt: "Use $architect-work-item to propose architecture for the bounded task package from the Main Agent."
+  short_description: "Analyze a bounded Architecture Assignment"
+  default_prompt: "Use $architect-work-item to complete the bounded Architecture Assignment from the Main Agent."
 
 policy:
   allow_implicit_invocation: false

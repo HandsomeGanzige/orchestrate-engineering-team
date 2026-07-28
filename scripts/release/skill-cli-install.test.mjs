@@ -76,6 +76,9 @@ test("README presents the exact Skill-first GitHub command before the optional P
     readme,
     /removes the five installed directories[\s\S]+retains their five entries[\s\S]+`skills-lock\.json`/,
   );
+  assert.doesNotMatch(readme, /--ref\s+v\d/);
+  assert.match(readme, /fork_turns: \"none\"/);
+  assert.match(readme, /owner Main is the only writer/i);
 });
 
 test("installed-suite validation accepts the five canonical Skills and resources", async (t) => {
@@ -92,6 +95,139 @@ test("installed-suite validation accepts the five canonical Skills and resources
     skills: 5,
     profiles: 4,
   });
+});
+
+test("installed-suite validation executes installed templates and rejects template corruption", async (t) => {
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), "installed-template-runtime-"));
+  t.after(() => rm(targetRoot, { recursive: true, force: true }));
+  await mkdir(path.join(targetRoot, ".agents"), { recursive: true });
+  await cp(
+    path.join(PROJECT_ROOT, ".agents/skills"),
+    path.join(targetRoot, ".agents/skills"),
+    { recursive: true },
+  );
+
+  await assertInstalledSkillSuite(targetRoot);
+  const installedTemplate = path.join(
+    targetRoot,
+    ".agents/skills/orchestrate-engineering-team/assets/work-item-index.md",
+  );
+  const template = await readFile(installedTemplate, "utf8");
+  await writeFile(
+    installedTemplate,
+    template.replace(
+      "⟪ORCHESTRATE:WORK_GOAL_JSON:6D71B11E⟫",
+      "corrupted-installed-template",
+    ),
+  );
+
+  await assert.rejects(
+    assertInstalledSkillSuite(targetRoot),
+    (error) => error.code === "INVALID_TEMPLATE"
+      && /template sentinel set does not match replacements/.test(error.message),
+  );
+});
+
+test("installed-suite validation rejects corruption in the installed public workflow wrapper", async (t) => {
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), "installed-workflow-runtime-"));
+  t.after(() => rm(targetRoot, { recursive: true, force: true }));
+  await mkdir(path.join(targetRoot, ".agents"), { recursive: true });
+  await cp(
+    path.join(PROJECT_ROOT, ".agents/skills"),
+    path.join(targetRoot, ".agents/skills"),
+    { recursive: true },
+  );
+
+  await assertInstalledSkillSuite(targetRoot);
+  const installedEntry = path.join(
+    targetRoot,
+    ".agents/skills/orchestrate-engineering-team/scripts/workflow.mjs",
+  );
+  const wrapper = await readFile(installedEntry, "utf8");
+  await writeFile(
+    installedEntry,
+    wrapper.replace(
+      "#!/usr/bin/env node\n",
+      '#!/usr/bin/env node\nthrow new Error("broken installed workflow wrapper");\n',
+    ),
+  );
+
+  await assert.rejects(
+    assertInstalledSkillSuite(targetRoot),
+    /broken installed workflow wrapper/,
+  );
+});
+
+test("installed-suite validation rejects newly corrupted transitive initialization", async (t) => {
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), "installed-transitive-runtime-"));
+  t.after(() => rm(targetRoot, { recursive: true, force: true }));
+  await mkdir(path.join(targetRoot, ".agents"), { recursive: true });
+  await cp(
+    path.join(PROJECT_ROOT, ".agents/skills"),
+    path.join(targetRoot, ".agents/skills"),
+    { recursive: true },
+  );
+
+  await assertInstalledSkillSuite(targetRoot);
+  const installedDependency = path.join(
+    targetRoot,
+    ".agents/skills/orchestrate-engineering-team/scripts/workflow-contract.mjs",
+  );
+  await writeFile(
+    installedDependency,
+    `throw new Error("broken installed transitive initialization");\n${await readFile(installedDependency, "utf8")}`,
+  );
+
+  await assert.rejects(
+    assertInstalledSkillSuite(targetRoot),
+    /broken installed transitive initialization/,
+  );
+});
+
+test("installed-suite validation follows and confines the actual workflow import closure", async (t) => {
+  const cases = [
+    {
+      name: "third-party bare import",
+      module: "value-policy.mjs",
+      importLine: 'import "yaml";',
+      expected: /must not import third-party runtime module 'yaml'/,
+    },
+    {
+      name: "directory escape",
+      module: "workflow-runtime.mjs",
+      importLine: 'import "../../../../../../outside-runtime.mjs";',
+      expected: /import escaped the bundled scripts directory/,
+    },
+    {
+      name: "missing transitive module",
+      module: "workflow-document.mjs",
+      importLine: 'import "./missing-runtime.mjs";',
+      expected: /workflow runtime module is missing/,
+    },
+  ];
+
+  for (const fixture of cases) {
+    await t.test(fixture.name, async () => {
+      const targetRoot = await mkdtemp(path.join(os.tmpdir(), "installed-import-closure-"));
+      t.after(() => rm(targetRoot, { recursive: true, force: true }));
+      await mkdir(path.join(targetRoot, ".agents"), { recursive: true });
+      await cp(
+        path.join(PROJECT_ROOT, ".agents/skills"),
+        path.join(targetRoot, ".agents/skills"),
+        { recursive: true },
+      );
+      const modulePath = path.join(
+        targetRoot,
+        ".agents/skills/orchestrate-engineering-team/scripts",
+        fixture.module,
+      );
+      await writeFile(
+        modulePath,
+        `${fixture.importLine}\n${await readFile(modulePath, "utf8")}`,
+      );
+      await assert.rejects(assertInstalledSkillSuite(targetRoot), fixture.expected);
+    });
+  }
 });
 
 test("removal validation requires absent directories and five retained lock entries", async (t) => {

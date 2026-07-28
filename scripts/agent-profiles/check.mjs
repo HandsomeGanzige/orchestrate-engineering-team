@@ -6,6 +6,12 @@ import { checkAgentProfiles, formatDiagnostic } from "./checker.mjs";
 
 const USAGE = "Usage: node scripts/agent-profiles/check.mjs [--root <path>]";
 
+/**
+ * Parses the checker's optional repository-root argument.
+ *
+ * @param {string[]} arguments_ - CLI arguments excluding executable and script path.
+ * @returns {{root: string}|null} Resolved root options, or `null` for invalid usage.
+ */
 export function parseArguments(arguments_) {
   if (arguments_.length === 0) return { root: process.cwd() };
   if (
@@ -18,6 +24,12 @@ export function parseArguments(arguments_) {
   return null;
 }
 
+/**
+ * Runs Agent Profile validation and prints deterministic diagnostics or a success summary.
+ *
+ * @param {string[]} [arguments_=process.argv.slice(2)] - CLI arguments excluding executable and script path.
+ * @returns {Promise<0|1|2>} Process exit code for success, validation failure, or usage/runtime failure.
+ */
 export async function main(arguments_ = process.argv.slice(2)) {
   const options = parseArguments(arguments_);
   if (!options) {

@@ -1,6 +1,6 @@
 {
   "name": "orchestrate-engineering-team",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,15 +8,17 @@
   },
   "packageManager": "pnpm@10.13.1",
   "scripts": {
-    "check": "pnpm check:agent-profiles",
+    "check": "pnpm check:agent-profiles && pnpm check:jsdoc",
     "check:agent-profiles": "node scripts/agent-profiles/check.mjs",
-    "test": "node --test scripts/agent-profiles/checker.test.mjs scripts/release/check-copied-package.test.mjs scripts/release/skill-cli-install.test.mjs scripts/release/codex-plugin-lifecycle.test.mjs",
+    "check:jsdoc": "node scripts/jsdoc/check.mjs",
+    "test": "node --test scripts/agent-profiles/checker.test.mjs scripts/workflow/workflow-document.test.mjs scripts/workflow/verification.test.mjs scripts/workflow/work-model.test.mjs scripts/workflow/workflow-cli.test.mjs scripts/workflow/workflow-store.test.mjs scripts/workflow/workflow-runtime-lifecycle.test.mjs scripts/workflow/workflow-assignment-voting.test.mjs scripts/workflow/workflow-hierarchy-query-validation.test.mjs scripts/release/workflow-import-closure.test.mjs scripts/release/check-copied-package.test.mjs scripts/release/skill-cli-install.test.mjs scripts/release/codex-plugin-lifecycle.test.mjs",
     "test:agent-profiles": "node --test scripts/agent-profiles/checker.test.mjs",
     "check:package": "node scripts/release/check-copied-package.mjs",
     "smoke:skill-install": "node scripts/release/skill-cli-install.mjs",
     "verify": "pnpm check && pnpm test && pnpm check:package"
   },
   "devDependencies": {
+    "es-module-lexer": "^2.3.1",
     "yaml": "2.9.0"
   }
 }

@@ -1,7 +1,7 @@
 interface:
   display_name: "Development Agent"
-  short_description: "Implement a bounded development work item"
-  default_prompt: "Use $develop-work-item to implement the bounded task package from the Main Agent."
+  short_description: "Implement a bounded Development Assignment"
+  default_prompt: "Use $develop-work-item to implement the bounded Development Assignment from the Main Agent."
 
 policy:
   allow_implicit_invocation: false

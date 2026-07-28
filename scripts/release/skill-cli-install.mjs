@@ -20,6 +20,7 @@ import {
   formatDiagnostic,
   parseStrictYaml,
 } from "../agent-profiles/checker.mjs";
+import { assertBundledWorkflowImportClosure } from "./workflow-import-closure.mjs";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const INSTALLER_PACKAGE = "skills@1.5.19";
@@ -37,7 +38,14 @@ const LIFECYCLE_SKILLS = Object.freeze([
   "verify-work-item",
   "review-work-item",
 ]);
+let installedRuntimeImportSerial = 0;
 
+/**
+ * Builds the exact pinned Skill CLI arguments used for project-local installation.
+ *
+ * @param {string} source - Git URL or local source repository URL.
+ * @returns {string[]} Complete `npx` argument vector.
+ */
 export function buildSkillInstallArguments(source) {
   return [
     "--yes",
@@ -52,6 +60,11 @@ export function buildSkillInstallArguments(source) {
   ];
 }
 
+/**
+ * Builds the exact pinned Skill CLI arguments used to remove the five installed Skills.
+ *
+ * @returns {string[]} Complete `npx` removal argument vector.
+ */
 export function buildSkillRemoveArguments() {
   return [
     "--yes",
@@ -64,6 +77,13 @@ export function buildSkillRemoveArguments() {
   ];
 }
 
+/**
+ * Resolves a child path and asserts that it remains under the disposable lifecycle root.
+ *
+ * @param {string} root - Isolation boundary root.
+ * @param {...string} parts - Path segments resolved beneath the root.
+ * @returns {string} Safe absolute child path.
+ */
 function containedPath(root, ...parts) {
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(resolvedRoot, ...parts);
@@ -74,6 +94,13 @@ function containedPath(root, ...parts) {
   return resolved;
 }
 
+/**
+ * Constructs a child-process environment whose home, config, data, and cache stay disposable.
+ *
+ * @param {NodeJS.ProcessEnv} environment - Parent environment to copy.
+ * @param {string} temporaryRoot - Disposable lifecycle boundary.
+ * @returns {{commandEnvironment: NodeJS.ProcessEnv, isolatedPaths: string[]}} Isolated environment and directories to create.
+ */
 export function buildIsolatedCommandEnvironment(environment, temporaryRoot) {
   const isolatedUserRoot = containedPath(temporaryRoot, "child-user-home");
   const isolatedCodexRoot = containedPath(temporaryRoot, "child-codex-home");
@@ -108,6 +135,15 @@ export function buildIsolatedCommandEnvironment(environment, temporaryRoot) {
   };
 }
 
+/**
+ * Runs one synchronous child command and raises a detailed error on non-zero exit.
+ *
+ * @param {string} command - Executable name or path.
+ * @param {string[]} args - Argument vector.
+ * @param {string} cwd - Child working directory.
+ * @param {NodeJS.ProcessEnv} [environment=process.env] - Child environment.
+ * @returns {import('node:child_process').SpawnSyncReturns<string>} Successful process result.
+ */
 function run(command, args, cwd, environment = process.env) {
   const result = spawnSync(command, args, {
     cwd,
@@ -121,6 +157,12 @@ function run(command, args, cwd, environment = process.env) {
   return result;
 }
 
+/**
+ * Copies the canonical Skill suite into a clean local Git source repository.
+ *
+ * @param {string} root - Empty source-repository directory.
+ * @returns {Promise<void>} Resolves after the fixture commit is created.
+ */
 async function createLocalSourceRepository(root) {
   await mkdir(path.join(root, ".agents"), { recursive: true });
   await cp(
@@ -146,10 +188,23 @@ async function createLocalSourceRepository(root) {
   );
 }
 
+/**
+ * Executes Git and returns trimmed standard output.
+ *
+ * @param {string[]} args - Git arguments.
+ * @param {string} root - Git working tree.
+ * @returns {string} Trimmed successful command output.
+ */
 function gitOutput(args, root) {
   return run("git", args, root).stdout.trim();
 }
 
+/**
+ * Lists installed Skill directory names beneath one project-local Skill root.
+ *
+ * @param {string} skillsRoot - `.agents/skills` directory to inspect.
+ * @returns {Promise<string[]>} Sorted directory names.
+ */
 async function installedSkillNames(skillsRoot) {
   const entries = await readdir(skillsRoot);
   const names = [];
@@ -160,6 +215,99 @@ async function installedSkillNames(skillsRoot) {
   return names.sort();
 }
 
+/**
+ * Executes installed templates and the public workflow CLI in fresh runtime state.
+ *
+ * @param {string} targetRoot - Target repository root.
+ * @param {string} skillsRoot - Installed project-local Skill root.
+ * @returns {Promise<void>} Resolves after template round-trip and CLI lifecycle checks pass.
+ */
+async function assertInstalledWorkflowRuntime(targetRoot, skillsRoot) {
+  const cliPath = path.join(
+    skillsRoot,
+    "orchestrate-engineering-team/scripts/workflow.mjs",
+  );
+  installedRuntimeImportSerial += 1;
+  const now = new Date("2026-07-28T01:00:00.000Z");
+  const documentUrl = pathToFileURL(path.join(
+    skillsRoot,
+    "orchestrate-engineering-team/scripts/workflow-document.mjs",
+  ));
+  documentUrl.searchParams.set(
+    "installed-template-validation",
+    String(installedRuntimeImportSerial),
+  );
+  const installedDocument = await import(documentUrl.href);
+  const workspace = installedDocument.newWorkspaceDocument(now);
+  installedDocument.newWorkDocument({
+    id: "installed-template-work",
+    name: "Installed template work",
+    summary: "Executes the installed work template.",
+    keywords: ["installed", "template", "runtime"],
+    type: "delivery",
+    goal: "Validate the installed work template.",
+    successCriteria: ["The installed work template renders."],
+  }, "../../../index.md", now);
+  assert.deepEqual(
+    installedDocument.decodeDocument(
+      installedDocument.encodeDocument(workspace),
+      "installed-workspace-index.md",
+    ),
+    workspace,
+  );
+
+  const runtimeRoot = path.join(
+    targetRoot,
+    ".installed-workflow-runtime",
+    String(installedRuntimeImportSerial),
+  );
+  /**
+   * Runs one installed CLI command in a fresh Node process and parses its JSON response.
+   *
+   * @param {string[]} args - Workflow CLI argument vector.
+   * @returns {unknown} Parsed JSON response emitted by the installed CLI.
+   */
+  const runInstalledCli = (args) => {
+    // Every command starts at the installed public entry point in a fresh process. This
+    // prevents this validator's ESM cache from masking wrapper or transitive failures.
+    const result = run(process.execPath, [cliPath, ...args], targetRoot);
+    return JSON.parse(result.stdout);
+  };
+  assert.deepEqual(
+    runInstalledCli(["init", "--root", runtimeRoot]),
+    { ok: true, workspace: ".agent-work/index.md" },
+  );
+  runInstalledCli([
+    "create",
+    "--root",
+    runtimeRoot,
+    "--id",
+    "installed-runtime-work",
+    "--name",
+    "Installed runtime work",
+    "--summary",
+    "Executes the installed workflow CLI and runtime graph.",
+    "--keywords",
+    '["installed","runtime","cli"]',
+    "--type",
+    "delivery",
+    "--goal",
+    "Validate the installed workflow runtime.",
+    "--success-criteria",
+    '["Installed workflow commands execute."]',
+  ]);
+  assert.deepEqual(
+    runInstalledCli(["validate", "--root", runtimeRoot]),
+    { valid: true, checked: 1, errors: [] },
+  );
+}
+
+/**
+ * Validates the complete installed Skill suite, resources, runtime closure, and profile registry.
+ *
+ * @param {string} targetRoot - Target Git repository containing project-local Skills.
+ * @returns {Promise<{skills: number, profiles: number}>} Installed suite counts.
+ */
 export async function assertInstalledSkillSuite(targetRoot) {
   const skillsRoot = path.join(targetRoot, ".agents/skills");
   assert.deepEqual(
@@ -178,7 +326,19 @@ export async function assertInstalledSkillSuite(targetRoot) {
     stat(
       path.join(
         skillsRoot,
-        "orchestrate-engineering-team/assets/subagent-task-packet.md",
+        "orchestrate-engineering-team/assets/role-task-packet.md",
+      ),
+    ),
+    stat(
+      path.join(
+        skillsRoot,
+        "orchestrate-engineering-team/assets/work-item-index.md",
+      ),
+    ),
+    stat(
+      path.join(
+        skillsRoot,
+        "orchestrate-engineering-team/assets/workspace-index.md",
       ),
     ),
     stat(
@@ -187,7 +347,17 @@ export async function assertInstalledSkillSuite(targetRoot) {
         "orchestrate-engineering-team/references/agent-profiles.yaml",
       ),
     ),
+    stat(
+      path.join(
+        skillsRoot,
+        "orchestrate-engineering-team/references/state-and-voting.md",
+      ),
+    ),
   ]);
+  await assertBundledWorkflowImportClosure(
+    path.join(skillsRoot, "orchestrate-engineering-team/scripts"),
+  );
+  await assertInstalledWorkflowRuntime(targetRoot, skillsRoot);
 
   const registryPath = path.join(
     skillsRoot,
@@ -215,6 +385,12 @@ export async function assertInstalledSkillSuite(targetRoot) {
   };
 }
 
+/**
+ * Validates the external installer's retained project lock entries after install or removal.
+ *
+ * @param {string} targetRoot - Target Git repository containing `skills-lock.json`.
+ * @returns {Promise<string[]>} Sorted retained Skill names.
+ */
 export async function assertRetainedProjectLock(targetRoot) {
   const lockPath = path.join(targetRoot, "skills-lock.json");
   const lock = JSON.parse(await readFile(lockPath, "utf8"));
@@ -229,6 +405,16 @@ export async function assertRetainedProjectLock(targetRoot) {
   return retained;
 }
 
+/**
+ * Corrupts one installed Skill and proves that rerunning installation restores source bytes.
+ *
+ * @param {string} targetRoot - Target repository containing installed Skills.
+ * @param {string} sourceRoot - Local source Git repository.
+ * @param {string} sourceUrl - URL passed to the external installer.
+ * @param {string} npx - Platform-specific `npx` executable.
+ * @param {NodeJS.ProcessEnv} environment - Isolated child environment.
+ * @returns {Promise<void>} Resolves when installed content is restored exactly.
+ */
 async function assertReinstallRestoresInstalledContent(
   targetRoot,
   sourceRoot,
@@ -260,6 +446,12 @@ async function assertReinstallRestoresInstalledContent(
   );
 }
 
+/**
+ * Confirms that named removal leaves no suite directories in the target project.
+ *
+ * @param {string} targetRoot - Target repository inspected after removal.
+ * @returns {Promise<void>} Resolves when all five Skill directories are absent.
+ */
 export async function assertRemovedSkillDirectories(targetRoot) {
   const skillsRoot = path.join(targetRoot, ".agents/skills");
   const remaining = await readdir(skillsRoot).catch((error) => {
@@ -276,6 +468,12 @@ export async function assertRemovedSkillDirectories(targetRoot) {
   }
 }
 
+/**
+ * Runs the complete networked install, refresh, remove, lock, and cleanup lifecycle.
+ *
+ * @param {NodeJS.ProcessEnv} [environment=process.env] - Parent environment used to construct isolated child state.
+ * @returns {Promise<{skills: number, profiles: number, retainedLockEntries: number}>} Lifecycle summary counts.
+ */
 export async function runSkillCliInstall(environment = process.env) {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "orchestrate-skill-install-"));
   const localSource = containedPath(temporaryRoot, "source-repository");

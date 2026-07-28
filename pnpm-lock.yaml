@@ -8,11 +8,17 @@ importers:
 
   .:
     devDependencies:
+      es-module-lexer:
+        specifier: ^2.3.1
+        version: 2.3.1
       yaml:
         specifier: 2.9.0
         version: 2.9.0
 
 packages:
+
+  es-module-lexer@2.3.1:
+    resolution: {integrity: sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA==}
 
   yaml@2.9.0:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
@@ -20,5 +26,7 @@ packages:
     hasBin: true
 
 snapshots:
+
+  es-module-lexer@2.3.1: {}
 
   yaml@2.9.0: {}

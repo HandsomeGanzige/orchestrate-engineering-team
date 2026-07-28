@@ -15,6 +15,11 @@ import {
 const PROJECT_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const CLI = path.join(PROJECT_ROOT, "scripts/agent-profiles/check.mjs");
 
+/**
+ * Creates a disposable repository fixture containing the canonical Agent Skill metadata.
+ *
+ * @returns {Promise<string>} Absolute temporary repository path owned by the calling test.
+ */
 async function createFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "agent-profiles-"));
   await cp(path.join(PROJECT_ROOT, ".agents"), path.join(root, ".agents"), {
@@ -25,7 +30,7 @@ async function createFixture() {
 
 test("strict YAML parser accepts standard YAML constructs and protects mappings", () => {
   const source = [
-    "version: 1",
+    "count: 1",
     "values: &shared",
     "  - first",
     "  - second",
@@ -44,7 +49,7 @@ test("strict YAML parser accepts standard YAML constructs and protects mappings"
 
   assert.equal(Object.getPrototypeOf(value), null);
   assert.deepEqual({ ...value }, {
-    version: 1,
+    count: 1,
     values: ["first", "second"],
     copy: ["first", "second"],
     literal: "first line\nsecond line\n",
@@ -99,7 +104,7 @@ test("mapping keys cannot mutate prototypes or bypass exact-key validation", asy
   const registry = await readFile(registryPath, "utf8");
   await writeFile(
     registryPath,
-    registry.replace("version: 1", "version: 1\n__proto__: polluted"),
+    registry.replace("enforcement: advisory", "enforcement: advisory\n__proto__: polluted"),
   );
 
   const result = await checkAgentProfiles(root);
@@ -118,17 +123,19 @@ test("validates the project Agent Profiles and metadata", async () => {
     skills: 5,
     uiMetadataFiles: 5,
     profiles: 4,
-    returnContracts: 6,
+    returnContracts: 9,
   });
   assert.deepEqual(STANDARD_RETURN, [
     "status",
-    "result",
-    "role-evidence",
-    "evidence-or-involved-files",
-    "unavailable-capabilities",
-    "discovered-problems",
-    "unresolved-matters",
-    "suggested-next-action",
+    "summary",
+    "artifacts",
+    "files",
+    "checks",
+    "requires_test",
+    "test_reason",
+    "requires_review",
+    "review_reason",
+    "blockers",
   ]);
 });
 
@@ -143,8 +150,8 @@ test("accepts every current Agent Skills frontmatter field", async (t) => {
   await writeFile(
     skillPath,
     source.replace(
-      '  version: "0.1.0"\n---',
-      '  version: "0.1.0"\nallowed-tools: "Read Grep Glob"\n---',
+      /(  author: [^\n]+)\n---/,
+      '$1\nallowed-tools: "Read Grep Glob"\n---',
     ),
   );
 
@@ -180,7 +187,7 @@ test("accepts standard block scalars, empty metadata, and arbitrary metadata key
   assert.equal(result.ok, true, result.diagnostics.map(formatDiagnostic).join("\n"));
 });
 
-test("main Skill dispatch guidance follows the runtime-exposed spawn schema", async () => {
+test("main Skill requires empty-history dispatch and Main-only task state", async () => {
   const source = await readFile(
     path.join(
       PROJECT_ROOT,
@@ -188,12 +195,11 @@ test("main Skill dispatch guidance follows the runtime-exposed spawn schema", as
     ),
     "utf8",
   );
-  const staleContextKey = ["fork", "context"].join("_");
-
-  assert.doesNotMatch(source, new RegExp(staleContextKey));
-  assert.doesNotMatch(source, /"items"\s*:/);
-  assert.match(source, /runtime-exposed schema is the source of truth/);
-  assert.match(source, /read the entire Role Skill/);
+  assert.match(source, /fork_turns\s*[":=]\s*["']?none["']?/i);
+  assert.match(
+    source,
+    /(?:only|sole|unique|single)[^\n]{0,100}(?:Main|owner)|(?:Main|owner)[^\n]{0,100}(?:only|sole|unique|single)/i,
+  );
 });
 
 test("enforces Agent Skills field names, types, and bounds", async (t) => {
@@ -212,8 +218,7 @@ test("enforces Agent Skills field names, types, and bounds", async (t) => {
         /^description:.*$/m,
         `description: ${"x".repeat(1025)}`,
       )
-      .replace(/^compatibility:.*$/m, "compatibility: 42")
-      .replace('  version: "0.1.0"', "  version: 1\nallowed-tools: [Read]\nunexpected: value"),
+      .replace(/  author: [^\n]+/, "  author: 1\nallowed-tools: [Read]\nunexpected: value"),
   );
 
   const result = await checkAgentProfiles(root);
@@ -223,7 +228,6 @@ test("enforces Agent Skills field names, types, and bounds", async (t) => {
   assert.ok(codes.includes("SKILL_FRONTMATTER_KEYS"));
   assert.ok(codes.includes("SKILL_NAME"));
   assert.ok(codes.includes("SKILL_DESCRIPTION"));
-  assert.ok(codes.includes("SKILL_COMPATIBILITY"));
   assert.ok(codes.includes("SKILL_METADATA"));
   assert.ok(codes.includes("SKILL_ALLOWED_TOOLS"));
 });
@@ -250,8 +254,16 @@ test("collects independent schema and return-contract diagnostics deterministica
         source
           .replace("enforcement: advisory", "enforcement: mandatory")
           .replace(
+            "write_scope: assigned-production-files-or-modules-only",
+            "write_scope: repository-wide",
+          )
+          .replace(
             "required: [workspace-read, workspace-write, shell]",
             "required: [workspace-read, workspace-read, shell]",
+          )
+          .replace(
+            "prohibited: [task-state-write, user-decision]",
+            "prohibited: [user-decision]",
           ),
       ),
     ),
@@ -268,7 +280,13 @@ test("collects independent schema and return-contract diagnostics deterministica
       ].join("\n"),
     ),
     readFile(roleSkillPath, "utf8").then((source) =>
-      writeFile(roleSkillPath, source.replace("- `Status`:", "- `Outcome`:")),
+      writeFile(
+        roleSkillPath,
+        source.replace(
+          /(^-\s+`?)status(`?\s*:)|^status\s*:/m,
+          (match) => match.replace("status", "outcome"),
+        ),
+      ),
     ),
   ]);
 
@@ -278,6 +296,8 @@ test("collects independent schema and return-contract diagnostics deterministica
   assert.equal(result.ok, false);
   assert.ok(codes.includes("ENFORCEMENT"));
   assert.ok(codes.includes("CAPABILITY_DUPLICATE"));
+  assert.ok(codes.includes("PROFILE_WRITE_SCOPE"));
+  assert.ok(codes.includes("TASK_STATE_CAPABILITY"));
   assert.ok(codes.includes("UI_INTERFACE_KEYS"));
   assert.ok(codes.includes("UI_IMPLICIT_INVOCATION"));
   assert.ok(codes.includes("RETURN_CONTRACT"));
@@ -295,6 +315,35 @@ test("collects independent schema and return-contract diagnostics deterministica
   for (const diagnostic of result.diagnostics) {
     assert.match(formatDiagnostic(diagnostic), /^.+:\d+:\d+ \[[A-Z_]+\] .+$/);
   }
+});
+
+test("requires the workflow registry, workflow resources, role packet, and state boundaries", async (t) => {
+  const root = await createFixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const mainRoot = path.join(root, ".agents/skills/orchestrate-engineering-team");
+  const registryPath = path.join(mainRoot, "references/agent-profiles.yaml");
+  const packetPath = path.join(mainRoot, "assets/role-task-packet.md");
+  const registry = await readFile(registryPath, "utf8");
+  const packet = await readFile(packetPath, "utf8");
+
+  await Promise.all([
+    writeFile(registryPath, registry.replace("enforcement: advisory", "enforcement: strict")),
+    writeFile(packetPath, packet.replace(/fork_turns\s*:\s*["']?none["']?/i, "fork_turns: all")),
+    rm(path.join(mainRoot, "references/state-and-voting.md")),
+    rm(path.join(mainRoot, "scripts/workflow.mjs")),
+    rm(path.join(mainRoot, "scripts/value-policy.mjs")),
+  ]);
+
+  const result = await checkAgentProfiles(root);
+  const codes = result.diagnostics.map(({ code }) => code);
+
+  assert.equal(result.ok, false);
+  assert.ok(codes.includes("ENFORCEMENT"));
+  assert.ok(codes.includes("EMPTY_HISTORY"));
+  assert.equal(codes.filter((code) => code === "FILE_MISSING").length, 3);
+  assert.ok(result.diagnostics.some(
+    ({ code, file }) => code === "FILE_MISSING" && file.endsWith("/scripts/value-policy.mjs"),
+  ));
 });
 
 test("CLI uses exit 0 for success, 1 for validation failure, and 2 for bad usage", async (t) => {

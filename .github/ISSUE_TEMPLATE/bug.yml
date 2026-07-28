@@ -8,10 +8,10 @@ body:
     attributes:
       value: Please remove secrets and private repository content before submitting.
   - type: input
-    id: version
+    id: revision
     attributes:
-      label: Version
-      description: Plugin version, tag, or commit.
+      label: Revision
+      description: Commit or checkout reference.
       placeholder: 0.1.0
     validations:
       required: true

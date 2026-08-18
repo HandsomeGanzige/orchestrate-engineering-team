@@ -1,6 +1,6 @@
 {
   "name": "orchestrate-engineering-team",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Coordinate Main-owned work items through bounded role assignments and optional child workflows.",
   "author": {
     "name": "HandsomeGanzige"

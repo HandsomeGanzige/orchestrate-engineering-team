@@ -1,7 +1,7 @@
 interface:
   display_name: "Review Agent"
-  short_description: "Return transient independent review findings"
-  default_prompt: "Use $review-work-item to execute the bounded Review Assignment and return concise transient findings to Main."
+  short_description: "Return structured v0.3.0 review findings"
+  default_prompt: "Use $review-work-item v0.3.0 under the immutable packet digest and return an evidence method plus bounded structured findings to Main."
 
 policy:
   allow_implicit_invocation: false

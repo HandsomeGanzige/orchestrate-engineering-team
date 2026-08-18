@@ -27,6 +27,10 @@ import {
 import { readAt, withWorkflowTransaction } from '../../.agents/skills/orchestrate-engineering-team/scripts/workflow-store.mjs';
 
 const now = new Date('2026-08-12T01:00:00.000Z');
+const gitBaseline = { repository: '.', head: 'b'.repeat(40) };
+const gitInspector = async (_root, prior, assignment) => prior
+  ? { ...gitBaseline, changed: [...assignment.write] }
+  : gitBaseline;
 const workflowCoreUrl = new URL('../../.agents/skills/orchestrate-engineering-team/scripts/workflow-core.mjs', import.meta.url).href;
 const input = (overrides = {}) => ({
   id: 'plain-runtime',
@@ -123,6 +127,13 @@ async function completeChild(root) {
 
 function roleResult(role, overrides = {}) {
   const verifier = ['test', 'review', 'retest', 'rereview'].includes(role);
+  if (verifier) return {
+    status: 'completed', summary: [`${role} completed.`], files: [],
+    checks: [{ command: `${role} check`, result: 'passed' }],
+    evidence_method: 'Independent behavioral inspection.',
+    findings: [{ severity: 'none', summary: 'No actionable finding.', evidence: 'The focused check passed.', pointers: [] }],
+    blockers: [], ...overrides,
+  };
   return {
     status: 'completed',
     summary: [`${role} completed.`],
@@ -134,6 +145,7 @@ function roleResult(role, overrides = {}) {
     requires_review: verifier ? null : true,
     review_reason: verifier ? null : 'State transitions need independent review.',
     blockers: [],
+    ...(role === 'architecture' ? { decision_proposals: [] } : {}),
     ...overrides,
   };
 }
@@ -150,8 +162,8 @@ async function assignment(root, id, role, extra = {}) {
       ...extra,
     },
   });
-  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id }, now });
-  await resultCommand({ root, work: 'plain-runtime', owner: 'main', input: { assignment: id, result: roleResult(role) }, now });
+  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id }, now, gitInspector });
+  await resultCommand({ root, work: 'plain-runtime', owner: 'main', input: { assignment: id, result: roleResult(role) }, now, gitInspector });
   await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'complete', input: { id }, now });
 }
 
@@ -166,9 +178,8 @@ test('create and claim persist plain work.md beside operational-only state.json'
   assert.doesNotMatch(markdown, /^---$|```json|<!--\s*workflow:/m);
   assert.equal(state.owner, 'main');
   assert.equal(state.lease_minutes, 60);
-  for (const semantic of ['Deliver a plain Markdown runtime.', 'The runtime is verified.', 'Plain runtime']) {
-    assert.equal(stateText.includes(semantic), false);
-  }
+  assert.equal(state.version, 2);
+  assert.equal(state.contract.objective, 'Deliver a plain Markdown runtime.');
   assert.deepEqual(await listCommand({ root, input: {} }), [{
     path: '.agent-work/open/plain-runtime/work.md',
     name: 'Plain runtime',
@@ -267,20 +278,20 @@ test('assignments preserve DAG and safe Development scopes and packets use empty
   const root = await rootFixture(t);
   await assignmentCommand({
     root, work: 'plain-runtime', owner: 'main', action: 'add', now,
-    input: { id: 'dev-a', role: 'development', objective: 'Build A.', write: ['src/a'], integrator: '/root' },
+    input: { id: 'dev-a', role: 'development', objective: 'Build A.', write: ['src/a'], agentId: '/root/a', topology: { mode: 'parallel', group: 'runtime', independent: true, shared_interface_stable: true, touches_global: false, integrator: '/root' } },
   });
   await assignmentCommand({
     root, work: 'plain-runtime', owner: 'main', action: 'add', now,
-    input: { id: 'dev-b', role: 'development', objective: 'Build B.', write: ['src/b'], integrator: '/root' },
+    input: { id: 'dev-b', role: 'development', objective: 'Build B.', write: ['src/b'], agentId: '/root/b', topology: { mode: 'parallel', group: 'runtime', independent: true, shared_interface_stable: true, touches_global: false, integrator: '/root' } },
   });
-  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dev-a' }, now });
-  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dev-b' }, now });
+  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dev-a' }, now, gitInspector });
+  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dev-b' }, now, gitInspector });
   assert.deepEqual((await packetCommand({ root, work: 'plain-runtime', input: { assignment: 'dev-b' } })).spawn, { fork_turns: 'none' });
   await assert.rejects(
     assignmentCommand({
       root, work: 'plain-runtime', owner: 'main', action: 'add', now,
-      input: { id: 'dev-c', role: 'development', objective: 'Build C.', write: ['src/a/nested'], integrator: '/root' },
-    }).then(() => assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dev-c' }, now })),
+      input: { id: 'dev-c', role: 'development', objective: 'Build C.', write: ['src/a/nested'], agentId: '/root/c', topology: { mode: 'parallel', group: 'runtime', independent: true, shared_interface_stable: true, touches_global: false, integrator: '/root' } },
+    }).then(() => assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dev-c' }, now, gitInspector })),
     (error) => error.code === 'PARALLEL_CONFLICT',
   );
   await assert.rejects(
@@ -308,14 +319,14 @@ test('coordination commands preserve Main prose and transient results become min
     root, work: 'plain-runtime', owner: 'main', action: 'add', now,
     input: { id: 'receipt-dev', role: 'development', objective: 'Change runtime.', write: ['src/receipt.mjs'] },
   });
-  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'receipt-dev' }, now });
+  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'receipt-dev' }, now, gitInspector });
   const transient = roleResult('development', {
     summary: ['RAW ROLE SUMMARY MUST VANISH'],
     artifacts: [{ path: 'src/receipt.mjs', purpose: 'RAW ROLE ARTIFACT MUST VANISH' }],
     files: ['src/receipt.mjs'],
     checks: [{ command: 'RAW ROLE COMMAND MUST VANISH', result: 'passed' }],
   });
-  await resultCommand({ root, work: 'plain-runtime', owner: 'main', input: { assignment: 'receipt-dev', result: transient }, now });
+  await resultCommand({ root, work: 'plain-runtime', owner: 'main', input: { assignment: 'receipt-dev', result: transient }, now, gitInspector });
   await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'complete', input: { id: 'receipt-dev' }, now });
   await voteCommand({
     root, work: 'plain-runtime', owner: 'main', action: 'record', now,
@@ -352,10 +363,10 @@ test('semantic identifiers and operational topology are rejected at commands and
     todoCommand({ root, work: 'plain-runtime', owner: 'main', action: 'add', now, input: { id: '1-batch', text: 'Numeric transit ID.' } }),
     (error) => error.code === 'INVALID_INPUT',
   );
-  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'add', now, input: { id: 'prerequisite', role: 'development', objective: 'First.' } });
-  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'add', now, input: { id: 'dependent', role: 'development', objective: 'Second.', dependsOn: ['prerequisite'] } });
+  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'add', now, input: { id: 'prerequisite', role: 'development', objective: 'First.', write: ['src/prerequisite'] } });
+  await assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'add', now, input: { id: 'dependent', role: 'development', objective: 'Second.', write: ['src/dependent'], dependsOn: ['prerequisite'] } });
   await assert.rejects(
-    assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dependent' }, now }),
+    assignmentCommand({ root, work: 'plain-runtime', owner: 'main', action: 'start', input: { id: 'dependent' }, now, gitInspector }),
     (error) => error.code === 'INVALID_TRANSITION',
   );
   const stateFile = path.join(root, '.agent-work/open/plain-runtime/state.json');
@@ -367,11 +378,13 @@ test('semantic identifiers and operational topology are rejected at commands and
 
   state.todos.pop();
   state.assignments[1].status = 'in_progress';
+  state.usage.active_assignments = 1;
   await writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`);
   validation = await validateWorkspace({ root });
   assert.match(validation.errors[0].message, /unfinished prerequisite/);
 
   state.assignments[1].status = 'pending';
+  state.usage.active_assignments = 0;
   state.assignments[0].dependsOn = ['dependent'];
   await writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`);
   validation = await validateWorkspace({ root });
@@ -1408,14 +1421,17 @@ test('CLI uses open paths, exposes explicit history, and preserves ownership fai
   const root = await mkdtemp(path.join(tmpdir(), 'plain-workflow-cli-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const created = await runCli([
-    'create', '--root', root, '--id', 'cli-work', '--name', 'CLI work',
-    '--goal', 'Exercise CLI.', '--success-criteria', '["CLI works."]',
+    'open', '--root', root, '--operation', 'create', '--request',
+    JSON.stringify({ id: 'cli-work', name: 'CLI work', goal: 'Exercise CLI.', successCriteria: ['CLI works.'] }),
   ], { now });
-  assert.equal(created.work, '.agent-work/open/cli-work/work.md');
+  assert.equal(created.data.created.work, '.agent-work/open/cli-work/work.md');
   await claimWork({ root, work: 'cli-work', owner: 'main', now });
   await assert.rejects(
     workCommand({ root, work: 'cli-work', owner: 'other', input: { progress: 'No.' }, now }),
     (error) => error.code === 'OWNER_MISMATCH',
   );
-  assert.deepEqual(await runCli(['list', '--root', root], { now }), await listCommand({ root, input: {} }));
+  assert.deepEqual(
+    (await runCli(['inspect', '--root', root, '--operation', 'list'], { now })).data,
+    await listCommand({ root, input: {} }),
+  );
 });

@@ -1,12 +1,12 @@
 # `orchestrate-engineering-team` acceptance report
 
-> Contract updated: 2026-08-12
+> Contract updated: 2026-08-18 for v0.3.0
 
 ## Conclusion
 
 Status: **pending final integrated verification**
 
-The acceptance baseline now covers plain per-Main Work Item documents, separate disposable coordination state, independent child ownership, retained context-safe archives, and transient specialist returns. Final pass counts belong here only after the runtime, contract surface, and package checks have been integrated and executed together.
+The acceptance baseline covers the descriptor-driven eight-intent CLI, immutable state-v2 role protocol, fail-closed governance, persisted graph/evidence metrics, plain per-Main documents, and transient role messages. Final pass counts belong here only after integrated verification.
 
 ## Required release evidence
 
@@ -39,9 +39,13 @@ The acceptance baseline now covers plain per-Main Work Item documents, separate 
 | C18 | Default list, find, resume, handoff, synchronization, and packet operations exclude archived work | Context-boundary and history opt-in tests | pending |
 | C19 | Explicit history access returns lightweight candidates before opening only the selected completed document | History query and bounded-read tests | pending |
 | C20 | Copied and installed packages preserve the same templates, references, runtime, and five fixed role Skills | Copied-package and installed-suite checks | pending |
+| C21 | The only public CLI commands are `open`, `plan`, `next`, `dispatch`, `accept`, `resolve`, `close`, and `inspect` | Descriptor/help/schema/examples and legacy-rejection tests | pending |
+| C22 | Every descendant, Assignment, attempt, and packet inherits the byte-identical immutable v2 contract and digest | State-v2 governance and packet tests | pending |
+| C23 | Development reports Git-derived changed surface/artifacts; Test/Review report evidence method/findings; Architecture proposals require Main confirmation | Role-schema, packet, Skill, and profile checks | pending |
+| C24 | Metrics expose only persisted graph/evidence facts and do not claim transient proof or OS isolation | Metrics and documentation checks | pending |
 
 ## Residual boundaries
 
-- Agent file and context boundaries remain advisory unless the host runtime enforces them; the Skills do not claim operating-system isolation.
+- `skill-local` enforcement and Agent file/context boundaries remain advisory unless the host runtime enforces them; the Skills do not claim operating-system isolation.
 - Plugin end-to-end lifecycle remains CI-only by design; local package and unit checks cover its static contract.
 - Archived Work Items are delivery records, not authoritative engineering documentation; durable requirements and decisions remain in project artifacts.

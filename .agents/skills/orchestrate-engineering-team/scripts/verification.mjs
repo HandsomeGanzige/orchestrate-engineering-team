@@ -1,4 +1,4 @@
-import { ensure, RESULT_KEYS } from './workflow-contract.mjs';
+import { ensure, resultKeysForRole } from './workflow-contract.mjs';
 import { boundedString, normalizedScope } from './value-policy.mjs';
 
 /**
@@ -10,9 +10,10 @@ import { boundedString, normalizedScope } from './value-policy.mjs';
  */
 export function validateRoleResult(result, role) {
   ensure(result && typeof result === 'object' && !Array.isArray(result), 'result must be an object', 'INVALID_RESULT');
+  const resultKeys = resultKeysForRole(role);
   ensure(
-    Object.keys(result).every((key) => RESULT_KEYS.has(key))
-      && [...RESULT_KEYS].every((key) => key in result),
+    Object.keys(result).every((key) => resultKeys.has(key))
+      && [...resultKeys].every((key) => key in result),
     'result fields must exactly match the role result protocol',
     'INVALID_RESULT',
   );
@@ -20,11 +21,10 @@ export function validateRoleResult(result, role) {
   ensure(['completed', 'partial', 'blocked'].includes(result.status), 'invalid result status', 'INVALID_RESULT');
   ensure(Array.isArray(result.summary) && result.summary.length <= 3, 'summary is limited to three items', 'INVALID_RESULT');
   result.summary.forEach((value, index) => boundedString(value, `summary[${index}]`));
-  ensure(Array.isArray(result.artifacts) && result.artifacts.length <= 30, 'artifacts must be a bounded array', 'INVALID_RESULT');
-  if (['architecture', 'test', 'retest', 'review', 'rereview'].includes(role)) {
-    ensure(result.artifacts.length === 0, `${role} result artifacts must be empty`, 'INVALID_RESULT');
-  }
-  for (const artifact of result.artifacts) {
+  const artifacts = result.artifacts ?? [];
+  ensure(Array.isArray(artifacts) && artifacts.length <= 30, 'artifacts must be a bounded array', 'INVALID_RESULT');
+  if (role === 'architecture') ensure(artifacts.length === 0, 'architecture result artifacts must be empty', 'INVALID_RESULT');
+  for (const artifact of artifacts) {
     ensure(
       artifact
         && Object.keys(artifact).length === 2
@@ -55,6 +55,21 @@ export function validateRoleResult(result, role) {
   if (['partial', 'blocked'].includes(result.status)) {
     ensure(result.blockers.length > 0, 'partial and blocked results require blockers', 'INVALID_RESULT');
   }
+  if (role === 'architecture') {
+    ensure(Array.isArray(result.decision_proposals) && result.decision_proposals.length <= 10, 'decision_proposals must be a bounded array', 'INVALID_RESULT');
+    for (const proposal of result.decision_proposals) {
+      ensure(proposal && Object.keys(proposal).length === 4
+        && typeof proposal.id === 'string'
+        && typeof proposal.summary === 'string'
+        && Array.isArray(proposal.options)
+        && typeof proposal.recommendation === 'string', 'decision proposal shape is invalid', 'INVALID_RESULT');
+      boundedString(proposal.id, 'decision proposal id', 100);
+      boundedString(proposal.summary, 'decision proposal summary', 500);
+      ensure(proposal.options.length >= 2 && proposal.options.length <= 10, 'decision proposal requires bounded options', 'INVALID_RESULT');
+      proposal.options.forEach((option, index) => boundedString(option, `decision proposal option ${index}`, 300));
+      boundedString(proposal.recommendation, 'decision proposal recommendation', 300);
+    }
+  }
   if (['architecture', 'development'].includes(role)) {
     ensure(
       typeof result.requires_test === 'boolean' && typeof result.requires_review === 'boolean',
@@ -64,14 +79,20 @@ export function validateRoleResult(result, role) {
     boundedString(result.test_reason, 'test_reason');
     boundedString(result.review_reason, 'review_reason');
   } else {
-    ensure(
-      result.requires_test === null
-        && result.requires_review === null
-        && result.test_reason === null
-        && result.review_reason === null,
-      `${role} result votes must be null`,
-      'INVALID_RESULT',
-    );
+    ensure(typeof result.evidence_method === 'string' && result.evidence_method.trim(), `${role} requires an evidence_method`, 'INVALID_RESULT');
+    boundedString(result.evidence_method, 'evidence_method', 500);
+    ensure(Array.isArray(result.findings) && result.findings.length <= 30, 'findings must be a bounded array', 'INVALID_RESULT');
+    for (const finding of result.findings) {
+      ensure(finding && Object.keys(finding).length === 4
+        && ['critical', 'high', 'medium', 'low', 'none'].includes(finding.severity)
+        && typeof finding.summary === 'string'
+        && typeof finding.evidence === 'string'
+        && Array.isArray(finding.pointers), 'finding shape is invalid', 'INVALID_RESULT');
+      boundedString(finding.summary, 'finding summary', 500);
+      boundedString(finding.evidence, 'finding evidence', 1000);
+      ensure(finding.pointers.length <= 10, 'finding pointers are unbounded', 'INVALID_RESULT');
+      finding.pointers.forEach(normalizedScope);
+    }
     if (result.status === 'completed') {
       ensure(
         result.checks.length > 0 && result.checks.some((check) => check.result !== 'not_run'),

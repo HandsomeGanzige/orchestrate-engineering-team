@@ -26,11 +26,14 @@ const EXPECTED_MAIN_RESOURCES = Object.freeze([
   "references/state-and-voting.md",
 ]);
 const EXPECTED_WORKFLOW_EXPORTS = Object.freeze([
+  "COMMAND_DESCRIPTORS",
   "LEASE_MINUTES",
+  "PUBLIC_COMMANDS",
   "WorkflowError",
   "assignmentCommand",
   "childSync",
   "claimWork",
+  "commandHelp",
   "computeVotes",
   "createWork",
   "decisionCommand",
@@ -41,6 +44,7 @@ const EXPECTED_WORKFLOW_EXPORTS = Object.freeze([
   "listCommand",
   "loadInput",
   "mutateWork",
+  "metricsCommand",
   "packetCommand",
   "parseCli",
   "releaseWork",
@@ -119,32 +123,14 @@ async function assertCopiedWorkflowRuns(mainSkillRoot, temporaryRoot) {
   );
   const runtimeRoot = path.join(temporaryRoot, "workflow-runtime-smoke");
   const now = new Date("2026-07-28T00:00:00.000Z");
-  assert.deepEqual(
-    await workflow.runCli(["init", "--root", runtimeRoot], { now }),
-    { ok: true, workspace: ".agent-work/open" },
-  );
-  await workflow.runCli([
-    "create",
-    "--root",
-    runtimeRoot,
-    "--id",
-    "copied-runtime",
-    "--name",
-    "Copied runtime",
-    "--summary",
-    "Exercises the copied transitive runtime graph.",
-    "--keywords",
-    '["copied","runtime","smoke"]',
-    "--type",
-    "delivery",
-    "--goal",
-    "Exercise copied runtime modules.",
-    "--success-criteria",
-    '["Copied commands execute."]',
+  const opened = await workflow.runCli([
+    "open", "--root", runtimeRoot, "--operation", "create", "--owner", "main", "--request",
+    JSON.stringify({ id: "copied-runtime", name: "Copied runtime", summary: "Exercises copied runtime.", type: "delivery", goal: "Exercise copied runtime modules.", successCriteria: ["Copied commands execute."] }),
   ], { now });
+  assert.equal(opened.ok, true);
   assert.deepEqual(
-    await workflow.runCli(["validate", "--root", runtimeRoot], { now }),
-    { valid: true, checked: 1, errors: [] },
+    await workflow.runCli(["inspect", "--root", runtimeRoot, "--operation", "validate"], { now }),
+    { ok: true, command: "inspect", data: { valid: true, checked: 1, errors: [] } },
   );
   const workRoot = path.join(runtimeRoot, ".agent-work/open/copied-runtime");
   const markdown = await readFile(path.join(workRoot, "work.md"), "utf8");
@@ -206,7 +192,7 @@ export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
 
     const manifest = await readJson(path.join(pluginRoot, ".codex-plugin/plugin.json"));
     assert.equal(manifest.name, listing.name);
-    assert.equal(manifest.version, "0.2.0");
+    assert.equal(manifest.version, "0.3.0");
     assert.equal(manifest.license, "MIT");
     assert.equal(
       manifest.repository,

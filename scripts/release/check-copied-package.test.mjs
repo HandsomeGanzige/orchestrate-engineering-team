@@ -11,7 +11,7 @@ const PROJECT_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 test("the copied release package preserves the Skill suite and optional Plugin adapter", async () => {
   assert.deepEqual(await checkCopiedPackage(), {
     plugin: "orchestrate-engineering-team",
-    version: "0.2.0",
+    version: "0.3.0",
     skills: 5,
     profiles: 4,
   });

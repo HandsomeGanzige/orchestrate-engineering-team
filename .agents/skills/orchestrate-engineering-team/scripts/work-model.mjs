@@ -1,6 +1,6 @@
 import {
   ensure,
-  RESULT_KEYS,
+  resultKeysForRole,
   ROLES,
   STAGES,
   STATUSES,
@@ -25,6 +25,19 @@ import {
   normalizedScope,
   scalar,
 } from './value-policy.mjs';
+import {
+  appendBoundedRecords,
+  approvedGates,
+  assertActiveClaimBinding,
+  assertCapabilities,
+  assertContractNarrowing,
+  assertDevelopmentClaims,
+  assignmentCapabilities,
+  assignmentClaimSpecs,
+  assignmentTopology,
+  claimsConflict,
+  refreshUsage,
+} from './governance-v2.mjs';
 
 /**
  * Finds one ID-addressed record or raises a stable not-found error.
@@ -437,17 +450,20 @@ function assertParallelSafe(candidate, active) {
     'PARALLEL_CONFLICT',
   );
   ensure(
-    candidate.sharedInterfaceStable && active.sharedInterfaceStable,
+    candidate.topology.mode === 'parallel' && active.topology.mode === 'parallel'
+      && candidate.topology.group === active.topology.group
+      && candidate.topology.independent && active.topology.independent
+      && candidate.topology.shared_interface_stable && active.topology.shared_interface_stable,
     'parallel development requires a stable shared interface',
     'PARALLEL_CONFLICT',
   );
   ensure(
-    !candidate.touchesGlobal && !active.touchesGlobal,
+    !candidate.topology.touches_global && !active.topology.touches_global,
     'parallel development cannot modify global or generated files',
     'PARALLEL_CONFLICT',
   );
   ensure(
-    candidate.integrator && candidate.integrator === active.integrator,
+    candidate.topology.integrator && candidate.topology.integrator === active.topology.integrator,
     'parallel development requires the same named integrator',
     'PARALLEL_CONFLICT',
   );
@@ -483,44 +499,32 @@ function validateAssignmentMutation(action) {
  * @param {object} document - Mutable Work Item document.
  * @param {string} action - Validated Assignment action.
  * @param {object} input - Action-specific Assignment payload.
+ * @param {object} [context={}] - Attempt clock and optional Git baseline.
  * @returns {{assignment: string, action: string}} Mutated Assignment identity and action.
  */
-function applyPreparedAssignment(document, action, input) {
+function applyPreparedAssignment(document, action, input, context = {}) {
   if (action === 'add') {
     validateId(input.id);
     ensure(ROLES.has(input.role), 'invalid assignment role', 'INVALID_INPUT');
     ensureUnique(document.blocks.assignments, input.id, 'assignment');
+    ensure(document.state.assignments.length < document.state.limits.assignments, 'assignment limit exceeded', 'LIMIT_EXCEEDED');
+    const write = normalizeStrings(input.write ?? [], 'write', { max: 100 }).map(normalizedScope);
     const assignment = {
       id: input.id,
       role: input.role,
       status: 'pending',
       objective: scalar(input.objective),
       successCriteria: normalizeStrings(input.successCriteria ?? [], 'successCriteria', { max: 30 }),
-      read: normalizeStrings(input.read ?? [], 'read', { max: 100 }),
-      write: normalizeStrings(input.write ?? [], 'write', { max: 100 }).map(normalizedScope),
+      read: normalizeStrings(input.read ?? [], 'read', { max: 100 }).map(normalizedScope),
+      write,
       decisions: normalizeStrings(input.decisions ?? [], 'decisions', { max: 30 }),
-      capabilities: {
-        required: normalizeStrings(
-          input.requiredCapabilities ?? input.capabilities?.required ?? [],
-          'requiredCapabilities',
-          { max: 30 },
-        ),
-        available: normalizeStrings(
-          input.availableCapabilities ?? input.capabilities?.available ?? [],
-          'availableCapabilities',
-          { max: 30 },
-        ),
-        unavailable: normalizeStrings(
-          input.unavailableCapabilities ?? input.capabilities?.unavailable ?? [],
-          'unavailableCapabilities',
-          { max: 30 },
-        ),
-      },
+      contract_digest: document.state.contract.digest,
+      capabilities: assignmentCapabilities(input),
+      topology: assignmentTopology(input),
+      claim_specs: assignmentClaimSpecs(input, input.role, write),
+      current_attempt: '',
       agentId: scalar(input.agentId),
       dependsOn: normalizeStrings(input.dependsOn ?? [], 'dependsOn', { max: 30 }),
-      sharedInterfaceStable: input.sharedInterfaceStable !== false,
-      touchesGlobal: input.touchesGlobal === true,
-      integrator: scalar(input.integrator),
       blockers: [],
       receipt: null,
     };
@@ -539,6 +543,8 @@ function applyPreparedAssignment(document, action, input) {
       validateId(dependency);
       itemById(document.blocks.assignments, dependency, 'assignment prerequisite');
     }
+    assertContractNarrowing(document.state.contract, assignment);
+    assertDevelopmentClaims(assignment);
     document.blocks.assignments.push(assignment);
     if (['architecture', 'development'].includes(assignment.role)) {
       document.blocks.verification.decisions = { test: null, review: null };
@@ -563,16 +569,55 @@ function applyPreparedAssignment(document, action, input) {
         'INVALID_TRANSITION',
       );
     }
+    assertCapabilities(assignment.capabilities);
+    assertContractNarrowing(document.state.contract, assignment);
+    ensure(document.state.usage.active_assignments < document.state.limits.active_assignments, 'active assignment limit exceeded', 'LIMIT_EXCEEDED');
+    const priorAttempts = document.state.attempts.filter((attempt) => attempt.assignment_id === assignment.id);
+    ensure(priorAttempts.length < document.state.limits.attempts_per_assignment
+      && document.state.attempts.length < document.state.limits.total_attempts, 'attempt limit exceeded', 'LIMIT_EXCEEDED');
     if (assignment.role === 'development') {
+      assertDevelopmentClaims(assignment);
       const activeAssignments = document.blocks.assignments.filter((entry) => entry.role === 'development'
         && entry.status === 'in_progress'
         && entry.id !== assignment.id);
       for (const active of activeAssignments) assertParallelSafe(assignment, active);
     }
+    const startedAt = (context.now ?? new Date()).toISOString();
+    const attempt = {
+      id: `${assignment.id}-attempt-${priorAttempts.length + 1}`,
+      assignment_id: assignment.id,
+      ordinal: priorAttempts.length + 1,
+      status: 'in_progress',
+      agent_id: scalar(input.agentId ?? assignment.agentId) || 'unassigned',
+      contract_digest: assignment.contract_digest,
+      started_at: startedAt,
+      ended_at: '',
+      gates: approvedGates(input.gates, context.now ?? new Date()),
+      git_baseline: assignment.role === 'development' ? context.gitBaseline : null,
+      receipt: null,
+      blockers: [],
+    };
+    if (assignment.role === 'development') ensure(attempt.git_baseline, 'Development requires a Git baseline', 'INVALID_GIT_SCOPE');
+    ensure(document.state.claims.length + assignment.claim_specs.length <= document.state.limits.claims, 'claim limit exceeded', 'LIMIT_EXCEEDED');
+    const claims = assignment.claim_specs.map((spec, index) => ({
+      id: `${attempt.id}-claim-${index + 1}`,
+      assignment_id: assignment.id,
+      attempt_id: attempt.id,
+      ...spec,
+      status: 'active',
+      acquired_at: startedAt,
+      released_at: '',
+    }));
+    for (const claim of claims) for (const active of document.state.claims.filter((entry) => entry.status === 'active')) {
+      ensure(!claimsConflict(claim, active), `resource claim conflicts with ${active.id}`, 'CLAIM_CONFLICT');
+    }
+    document.state.attempts.push(attempt);
+    document.state.claims.push(...claims);
+    assignment.current_attempt = attempt.id;
     assignment.status = 'in_progress';
     assignment.blockers = [];
     if (['partial', 'blocked'].includes(assignment.receipt?.status)) assignment.receipt = null;
-    if (input.agentId !== undefined) assignment.agentId = scalar(input.agentId);
+    assignment.agentId = attempt.agent_id;
   } else if (action === 'complete') {
     ensure(
       assignment.status === 'in_progress' && assignment.receipt?.status === 'completed',
@@ -583,6 +628,9 @@ function applyPreparedAssignment(document, action, input) {
       .map((entry) => entry.receipt?.completed_order)
       .filter(Number.isInteger);
     assignment.receipt.completed_order = Math.max(0, ...completedOrders) + 1;
+    const attempt = itemById(document.state.attempts, assignment.current_attempt, 'attempt');
+    ensure(attempt.status === 'completed' && attempt.receipt?.status === 'completed', 'assignment completion requires a completed current attempt', 'INVALID_TRANSITION');
+    attempt.receipt.completed_order = assignment.receipt.completed_order;
     assignment.status = 'completed';
     projectCompletedAssignmentVote(document, assignment);
   } else {
@@ -593,6 +641,15 @@ function applyPreparedAssignment(document, action, input) {
     );
     assignment.status = 'blocked';
     assignment.blockers = normalizeStrings(input.blockers, 'blockers', { min: 1, max: 10 });
+    const attempt = document.state.attempts.find((entry) => entry.id === assignment.current_attempt);
+    if (attempt?.status === 'in_progress') {
+      attempt.status = 'blocked';
+      attempt.ended_at = (context.now ?? new Date()).toISOString();
+      attempt.blockers = [...assignment.blockers];
+      for (const claim of document.state.claims.filter((entry) => entry.attempt_id === attempt.id && entry.status === 'active')) {
+        claim.status = 'released'; claim.released_at = attempt.ended_at;
+      }
+    }
   }
   if (['architecture', 'development'].includes(assignment.role)) {
     document.blocks.verification.decisions = { test: null, review: null };
@@ -605,11 +662,16 @@ function applyPreparedAssignment(document, action, input) {
  *
  * @param {string} action - Assignment lifecycle action.
  * @param {object} input - Action payload captured by the closure.
+ * @param {object} [context={}] - Attempt clock and optional Git baseline.
  * @returns {(document: object) => {assignment: string, action: string}} Prepared Assignment mutator.
  */
-export function prepareAssignmentMutation(action, input) {
+export function prepareAssignmentMutation(action, input, context = {}) {
   validateAssignmentMutation(action);
-  return (document) => applyPreparedAssignment(document, action, input);
+  return (document) => {
+    const result = applyPreparedAssignment(document, action, input, context);
+    refreshUsage(document.state);
+    return result;
+  };
 }
 
 /**
@@ -629,9 +691,10 @@ export function applyAssignment(document, action, input) {
  *
  * @param {object} document - Mutable Work Item document.
  * @param {{assignment: string, result: object}} input - Assignment identity and role result envelope.
+ * @param {object} [context={}] - Acceptance clock and optional Git-derived changed surface.
  * @returns {{assignment: string, result_status: string}} Assignment identity and accepted result status.
  */
-export function applyResult(document, input) {
+export function applyResult(document, input, context = {}) {
   const assignment = itemById(document.blocks.assignments, input.assignment, 'assignment');
   ensure(
     assignment.status === 'in_progress',
@@ -639,8 +702,17 @@ export function applyResult(document, input) {
     'INVALID_TRANSITION',
   );
   const result = validateRoleResult(input.result, assignment.role);
+  const attempt = itemById(document.state.attempts, assignment.current_attempt, 'attempt');
+  ensure(attempt.status === 'in_progress' && attempt.contract_digest === document.state.contract.digest, 'result does not bind to the active contract attempt', 'INVALID_TRANSITION');
   const receipt = { status: result.status };
-  if (assignment.role === 'development') receipt.changed_surface = [...new Set(result.files.map(normalizedScope))].sort();
+  if (assignment.role === 'development') {
+    const reported = [...new Set(result.files.map(normalizedScope))].sort();
+    if (result.status === 'completed') {
+      ensure(Array.isArray(context.gitChangedSurface), 'Development completion requires Git-derived changed surface', 'INVALID_GIT_SCOPE');
+      ensure(JSON.stringify(reported) === JSON.stringify(context.gitChangedSurface), 'Development result files do not equal the Git-derived changed surface', 'INVALID_GIT_SCOPE');
+    }
+    receipt.changed_surface = reported;
+  }
   if (['architecture', 'development'].includes(assignment.role)) {
     receipt.votes = {
       test: { requires: result.requires_test, reason: result.test_reason },
@@ -650,13 +722,25 @@ export function applyResult(document, input) {
   if (['test', 'retest', 'review', 'rereview'].includes(assignment.role)) {
     receipt.passed = result.status === 'completed'
       && result.checks.length > 0
-      && result.checks.every((check) => check.result === 'passed');
+      && result.checks.every((check) => check.result === 'passed')
+      && result.findings.every((finding) => finding.severity === 'none');
   }
-  assignment.receipt = receipt;
+  if (['test', 'retest', 'review', 'rereview'].includes(assignment.role)) {
+    appendBoundedRecords(document.state, attempt, input.result, 'finding');
+  }
+  assignment.receipt = structuredClone(receipt);
+  attempt.receipt = structuredClone(receipt);
+  attempt.ended_at = (context.now ?? new Date()).toISOString();
+  attempt.status = result.status === 'completed' ? 'completed' : 'blocked';
+  attempt.blockers = result.status === 'completed' ? [] : [...result.blockers];
+  for (const claim of document.state.claims.filter((entry) => entry.attempt_id === attempt.id && entry.status === 'active')) {
+    claim.status = 'released'; claim.released_at = attempt.ended_at;
+  }
   if (['partial', 'blocked'].includes(result.status)) {
     assignment.status = 'blocked';
     assignment.blockers = [...result.blockers];
   }
+  refreshUsage(document.state);
   return { assignment: assignment.id, result_status: result.status };
 }
 
@@ -813,8 +897,21 @@ export function applyVote(document, action, input) {
  */
 export function makePacket(document, assignmentId) {
   const assignment = itemById(document.blocks.assignments, assignmentId, 'assignment');
+  ensure(assignment.status === 'in_progress', 'packet requires an in-progress assignment', 'INVALID_TRANSITION');
+  assertCapabilities(assignment.capabilities);
+  assertContractNarrowing(document.state.contract, assignment);
+  const attempt = itemById(document.state.attempts, assignment.current_attempt, 'attempt');
+  ensure(attempt.status === 'in_progress' && attempt.contract_digest === document.state.contract.digest
+    && attempt.gates.every((gate) => gate.status === 'approved'), 'attempt is not dispatchable', 'APPROVAL_REQUIRED');
+  if (assignment.role === 'development') {
+    assertDevelopmentClaims(assignment);
+  }
+  assertActiveClaimBinding(document.state, assignment, attempt);
   const packet = {
     assignment_id: assignment.id,
+    attempt_id: attempt.id,
+    contract: structuredClone(document.state.contract),
+    contract_digest: assignment.contract_digest,
     role: assignment.role,
     objective: assignment.objective,
     success_criteria: assignment.successCriteria,
@@ -826,10 +923,13 @@ export function makePacket(document, assignmentId) {
       available: assignment.capabilities.available,
       unavailable: assignment.capabilities.unavailable,
     },
+    topology: structuredClone(assignment.topology),
+    claims: document.state.claims.filter((claim) => claim.attempt_id === attempt.id && claim.status === 'active').map((claim) => ({ ...claim })),
+    gates: attempt.gates.map((gate) => ({ ...gate })),
     return_contract: {
       status: 'completed | partial | blocked',
       summary_max_items: 3,
-      fields: [...RESULT_KEYS],
+      fields: [...resultKeysForRole(assignment.role)],
     },
     spawn: { fork_turns: 'none' },
   };

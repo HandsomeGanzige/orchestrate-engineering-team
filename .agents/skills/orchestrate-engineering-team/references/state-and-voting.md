@@ -1,6 +1,6 @@
 # Work Item documents, coordination state, and verification voting
 
-Use this reference when Main creates, resumes, transitions, verifies, completes, archives, or explicitly inspects history. `workflow.mjs` is the deterministic authority for machine-state mutations and context-safe discovery.
+Use this v0.3.0 reference when Main creates, resumes, transitions, verifies, completes, archives, or explicitly inspects history. `workflow.mjs` exposes exactly `open`, `plan`, `next`, `dispatch`, `accept`, `resolve`, `close`, and `inspect`; `governance-v2.mjs` is the deterministic fail-closed authority for state v2.
 
 ## Contents
 
@@ -55,7 +55,9 @@ Use `design` only for a substantive Architecture Assignment. A clear user reques
 
 ## Operational state
 
-The helper stores IDs, status, stage, parent linkage, ownership leases, active Todo and Assignment routing, verification votes, and other runtime coordination in `state.json`. Main does not hand-maintain JSON. Ordinary roles must never write `work.md`, `state.json`, or any other task state.
+The helper stores IDs, status, stage, parent linkage, ownership leases, active Todo and Assignment routing, attempts, claims, approved gates, bounded findings/conflicts, verification votes, exact limits, and aggregate usage in `state.json`. Every root owns one immutable global contract; every descendant copies its contract bytes, and every Assignment, attempt, and role packet carries the same SHA-256 digest. v1 state is rejected rather than migrated. Main does not hand-maintain JSON. Ordinary roles must never write `work.md`, `state.json`, or any other task state.
+
+`inspect` metrics expose only persisted graph facts (`assignments`, `active_assignments`, `total_attempts`, `claims`) and persisted evidence facts (`findings`, `conflicts`). A transient check or role message is never persisted proof. The contract's `skill-local` enforcement records workflow authority but does not claim operating-system isolation.
 
 Keep exactly one in-progress Todo in every active Work Item. Todo and Assignment runtime records exist only to coordinate unfinished work; do not reproduce a chronological Assignment ledger or paste role returns into `work.md`. Main extracts useful delivery facts from transient messages and routes durable engineering knowledge to authoritative project artifacts.
 
@@ -64,7 +66,7 @@ Default list, find, resume, handoff, child synchronization, and packet generatio
 ## Assignment and child rules
 
 - Architecture, Development, Test, Review, Retest, and Rereview are Assignments, not Work Items. They own no task document, directory, or retained result file.
-- Architecture, Test, and Review return concise transient messages. Development returns a concise transient message plus references to authoritative project artifacts it changed.
+- Architecture returns bounded advisory decision proposals that Main must explicitly confirm before they become decisions. Development returns the exact Git-derived changed surface and authoritative project artifacts it changed. Test and Review return an explicit evidence method and bounded structured findings.
 - Durable facts belong in project code, tests, configuration, schemas, contracts, constraints, or decision documents. Task-local materials and role-result persistence are not part of the workflow.
 - Parallel Development is permitted only when Assignments have no ordering dependency, disjoint write scopes, settled shared interfaces, no shared migration, lockfile, global configuration, generated file, or model, a named integrator, enough runtime slots, and meaningful critical-path benefit.
 

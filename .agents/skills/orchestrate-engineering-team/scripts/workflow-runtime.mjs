@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import { execFile as execFileCallback } from 'node:child_process';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import {
   newWorkDocument,
@@ -44,6 +46,52 @@ import {
   completionIssues,
 } from './verification.mjs';
 import { normalizeStrings, scalar } from './value-policy.mjs';
+import { normalizedScope } from './value-policy.mjs';
+import { scopeContains } from './governance-v2.mjs';
+
+const execFile = promisify(execFileCallback);
+
+/**
+ * Inspects a repository baseline or its current Git-derived changed surface.
+ * @param {string} root - Workflow repository root.
+ * @param {object|null} [baseline=null] - Persisted repository and HEAD baseline.
+ * @returns {Promise<object>} Repository baseline or baseline plus sorted changed paths.
+ */
+export async function inspectGit(root, baseline = null) {
+  let repository;
+  try {
+    ({ stdout: repository } = await execFile('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' }));
+  } catch {
+    ensure(false, 'Development requires a Git repository', 'INVALID_GIT_SCOPE');
+  }
+  ensure(path.resolve(repository.trim()) === path.resolve(root), 'Development scope must be rooted at the workflow repository', 'INVALID_GIT_SCOPE');
+  const { stdout: head } = await execFile('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
+  const normalizedHead = head.trim();
+  ensure(/^[a-f0-9]{40,64}$/.test(normalizedHead), 'Git baseline HEAD is invalid', 'INVALID_GIT_SCOPE');
+  if (baseline === null) {
+    const { stdout: status } = await execFile('git', ['status', '--porcelain=v1', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
+    ensure(status === '', 'Development attempt must start from a clean repository', 'DIRTY_GIT_SCOPE');
+    return { repository: '.', head: normalizedHead };
+  }
+  ensure(baseline.repository === '.' && /^[a-f0-9]{40,64}$/.test(baseline.head), 'persisted Git baseline is invalid', 'INVALID_GIT_SCOPE');
+  const [{ stdout: diff }, { stdout: status }] = await Promise.all([
+    execFile('git', ['diff', '--name-only', '-z', baseline.head, '--'], { cwd: root, encoding: 'utf8' }),
+    execFile('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], { cwd: root, encoding: 'utf8' }),
+  ]);
+  const changed = new Set(diff.split('\0').filter(Boolean));
+  const entries = status.split('\0').filter(Boolean);
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const code = entry.slice(0, 2);
+    const pointer = entry.slice(3);
+    if (pointer) changed.add(pointer);
+    if (code.includes('R') || code.includes('C')) {
+      const destination = entries[++index];
+      if (destination) changed.add(destination);
+    }
+  }
+  return { repository: '.', head: normalizedHead, changed: [...changed].sort() };
+}
 
 /**
  * Enforces the minimum evidence required to promote a planned step into a Child Work Item.
@@ -103,8 +151,9 @@ export async function createWork({ root, input, owner, now = new Date(), childOn
     } else {
       target = path.join(root, '.agent-work', 'open', input.id, 'work.md');
     }
+    const parentDocument = parentFile ? await readAt(parentFile) : null;
     const parentRelative = parentFile ? path.relative(path.dirname(target), parentFile) : null;
-    const document = newWorkDocument(input, parentRelative, now);
+    const document = newWorkDocument(input, parentRelative, now, parentDocument?.state.contract ?? null);
     validateDocument(document, { file: target });
     const entry = {
       id: document.frontmatter.id,
@@ -283,8 +332,15 @@ export async function todoCommand({ action, input, ...args }) {
  * @param {{action: string, input: object, [key: string]: unknown}} args - Assignment action, payload, and common work context.
  * @returns {Promise<object>} Persisted Assignment mutation result.
  */
-export async function assignmentCommand({ action, input, ...args }) {
-  return mutateWork({ ...args, mutate: prepareAssignmentMutation(action, input) });
+export async function assignmentCommand({ action, input, gitInspector = inspectGit, ...args }) {
+  return mutateWork({ ...args, mutate: async (document) => {
+    let gitBaseline = null;
+    if (action === 'start') {
+      const assignment = itemById(document.blocks.assignments, input.id, 'assignment');
+      if (assignment.role === 'development') gitBaseline = await gitInspector(args.root, null, assignment);
+    }
+    return prepareAssignmentMutation(action, input, { now: args.now ?? new Date(), gitBaseline })(document);
+  } });
 }
 
 /**
@@ -293,8 +349,40 @@ export async function assignmentCommand({ action, input, ...args }) {
  * @param {{input: object, [key: string]: unknown}} args - Role result payload and common work context.
  * @returns {Promise<object>} Persisted role-result mutation response.
  */
-export async function resultCommand({ input, ...args }) {
-  return mutateWork({ ...args, mutate: (document) => applyResult(document, input) });
+export async function resultCommand({ input, gitInspector = inspectGit, ...args }) {
+  return mutateWork({ ...args, mutate: async (document) => {
+    const assignment = itemById(document.blocks.assignments, input.assignment, 'assignment');
+    let gitChangedSurface;
+    if (assignment.role === 'development' && input.result?.status === 'completed') {
+      const attempt = itemById(document.state.attempts, assignment.current_attempt, 'attempt');
+      const inspection = await gitInspector(args.root, attempt.git_baseline, assignment);
+      ensure(Array.isArray(inspection.changed), 'Git inspection did not return changed paths', 'INVALID_GIT_SCOPE');
+      const attributionDevelopment = document.state.assignments.filter((candidate) => {
+        if (candidate.role !== 'development') return false;
+        if (candidate.status === 'in_progress') return true;
+        if (candidate.status !== 'completed') return false;
+        const candidateAttempt = document.state.attempts.find((entry) => entry.id === candidate.current_attempt);
+        return candidateAttempt?.status === 'completed'
+          && JSON.stringify(candidateAttempt.git_baseline) === JSON.stringify(attempt.git_baseline);
+      });
+      const ownedChanges = [...new Set(inspection.changed.map((pointer) => {
+        const canonical = normalizedScope(pointer);
+        ensure(canonical === pointer, `Git changed path is not canonical: ${pointer}`, 'INVALID_GIT_SCOPE');
+        ensure(!document.state.contract.forbidden_changes.some((scope) => scopeContains(scope, canonical)), `Git changed path is forbidden by the global contract: ${canonical}`, 'INVALID_GIT_SCOPE');
+        const owners = attributionDevelopment.filter((candidate) => {
+          if (!candidate.write.some((scope) => scopeContains(scope, canonical))) return false;
+          return candidate.status !== 'completed' || candidate.receipt?.changed_surface.includes(canonical);
+        });
+        ensure(owners.length === 1, `Git changed path does not have exactly one active Development owner: ${canonical}`, 'INVALID_GIT_SCOPE');
+        return `${owners[0].id}\0${canonical}`;
+      }))];
+      gitChangedSurface = ownedChanges
+        .filter((entry) => entry.startsWith(`${assignment.id}\0`))
+        .map((entry) => entry.slice(assignment.id.length + 1))
+        .sort();
+    }
+    return applyResult(document, input, { now: args.now ?? new Date(), gitChangedSurface });
+  } });
 }
 
 /**
@@ -481,6 +569,36 @@ export async function historyCommand({ root, work }) {
 }
 
 /**
+ * Reads only persisted graph and evidence counters for one open Work Item.
+ *
+ * @param {{root: string, work: string}} args - Workspace root and open Work Item reference.
+ * @returns {Promise<object>} Persisted metrics and their explicit authority boundary.
+ */
+export async function metricsCommand({ root, work }) {
+  return withWorkflowTransaction(root, async () => {
+    const file = await resolveWork(root, work);
+    const document = await readAt(file);
+    return {
+      work: path.relative(root, file),
+      contract_digest: document.state.contract.digest,
+      graph: {
+        assignments: document.state.usage.assignments,
+        active_assignments: document.state.usage.active_assignments,
+        total_attempts: document.state.usage.total_attempts,
+        claims: document.state.usage.claims,
+      },
+      evidence: {
+        findings: document.state.usage.findings,
+        conflicts: document.state.usage.conflicts,
+      },
+      persisted: true,
+      enforcement: document.state.contract.enforcement,
+      operating_system_isolation: false,
+    };
+  });
+}
+
+/**
  * Appends one normalized validation diagnostic to a shared error collection.
  *
  * @param {object[]} errors - Mutable diagnostic collection.
@@ -517,10 +635,10 @@ export async function validateWorkspace({ root }) {
       if (!parent) validationError(errors, relative, 'INVALID_PARENT', 'parent link does not resolve to open work');
       else if (!parent.state.children.some((entry) => path.resolve(workspaceRoot, entry.path) === file && entry.id === document.state.id)) {
         validationError(errors, relative, 'ORPHAN_CHILD', 'child is not registered by parent');
-      }
+      } else if (JSON.stringify(parent.state.contract) !== JSON.stringify(document.state.contract)) validationError(errors, relative, 'INVALID_CONTRACT', 'child contract bytes differ from parent contract');
     } else if (path.dirname(path.dirname(file)) !== path.join(workspaceRoot, '.agent-work', 'open')) {
       validationError(errors, relative, 'INVALID_PARENT', 'nested work requires a parent link');
-    }
+    } else if (document.state.contract.root_work_id !== document.state.id) validationError(errors, relative, 'INVALID_CONTRACT', 'root contract identity does not match root work');
     for (const child of document.state.children) {
       const childFile = path.resolve(workspaceRoot, child.path);
       const linked = documents.get(childFile);

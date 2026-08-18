@@ -227,7 +227,7 @@ async function discoverInstalledPluginSkills(environment, codexHome) {
       id: 1,
       method: "initialize",
       params: {
-        clientInfo: { name: "orchestrate-engineering-team-ci", version: "0.2.0" },
+        clientInfo: { name: "orchestrate-engineering-team-ci", version: "0.3.0" },
         capabilities: { experimentalApi: true },
       },
     });

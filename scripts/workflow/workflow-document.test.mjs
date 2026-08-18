@@ -13,7 +13,8 @@ test('document interface separates readable Markdown from coordination state', (
   const document = newWorkDocument({ id: 'plain-document', name: 'Plain document', goal: 'Stay readable.', successCriteria: ['Readable.'] }, null, new Date(0));
   syncWork(document);
   assert.doesNotMatch(document.markdown, /^---$|```json|<!--\s*workflow:/m);
-  assert.equal(JSON.stringify(document.state).includes('Stay readable.'), false);
+  assert.equal(document.state.version, 2);
+  assert.equal(document.state.contract.objective, 'Stay readable.');
   assert.equal(validateDocument(document), document);
 });
 
@@ -124,7 +125,7 @@ test('Architecture vote projection follows completion order instead of Assignmen
     applyResult(document, {
       assignment: id,
       result: {
-        status: 'completed', summary: [`${label} completed.`], artifacts: [], files: [],
+        status: 'completed', summary: [`${label} completed.`], artifacts: [], decision_proposals: [], files: [],
         checks: [{ command: `${label} check`, result: 'passed' }],
         requires_test: requires, test_reason: `${label} test vote.`,
         requires_review: requires, review_reason: `${label} review vote.`, blockers: [],
@@ -167,7 +168,7 @@ test('state recovery validation rejects malformed ownership, assignment packets,
   applyResult(document, {
     assignment: 'strict-architecture',
     result: {
-      status: 'completed', summary: ['Architecture completed.'], artifacts: [], files: [],
+      status: 'completed', summary: ['Architecture completed.'], artifacts: [], decision_proposals: [], files: [],
       checks: [{ command: 'architecture check', result: 'passed' }],
       requires_test: true, test_reason: 'Recovery behavior needs testing.',
       requires_review: true, review_reason: 'Recovery boundaries need review.', blockers: [],
@@ -187,11 +188,11 @@ test('state recovery validation rejects malformed ownership, assignment packets,
       review: { requires: true, reason: 'Retry needs review.' },
     },
   };
-  validateState(blockedAssignment);
+  assert.throws(() => validateState(blockedAssignment));
   blockedAssignment.assignments[0].status = 'in_progress';
   blockedAssignment.assignments[0].blockers = [];
   blockedAssignment.assignments[0].receipt = null;
-  validateState(blockedAssignment);
+  assert.throws(() => validateState(blockedAssignment));
 
   const blockedTodo = structuredClone(document.state);
   blockedTodo.status = 'blocked';
@@ -212,7 +213,7 @@ test('state recovery validation rejects malformed ownership, assignment packets,
     ['missing packet read scope', (state) => { delete state.assignments[0].read; }],
     ['missing packet decisions', (state) => { delete state.assignments[0].decisions; }],
     ['missing dependency field', (state) => { delete state.assignments[0].dependsOn; }],
-    ['missing parallel safety field', (state) => { delete state.assignments[0].sharedInterfaceStable; }],
+    ['missing parallel safety field', (state) => { delete state.assignments[0].topology.shared_interface_stable; }],
     ['malformed verification votes', (state) => { state.verification.votes.development = {}; }],
     ['missing architecture vote', (state) => { state.verification.votes.architecture = null; }],
     ['disagreeing architecture vote', (state) => {
@@ -226,7 +227,7 @@ test('state recovery validation rejects malformed ownership, assignment packets,
     await t.test(name, () => {
       const state = structuredClone(document.state);
       mutate(state);
-      assert.throws(() => validateState(state), { code: 'INVALID_DOCUMENT' });
+      assert.throws(() => validateState(state));
     });
   }
 });

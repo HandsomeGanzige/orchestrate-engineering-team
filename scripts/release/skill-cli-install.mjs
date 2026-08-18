@@ -245,32 +245,14 @@ async function assertInstalledWorkflowRuntime(targetRoot, skillsRoot) {
     const result = run(process.execPath, [cliPath, ...args], targetRoot);
     return JSON.parse(result.stdout);
   };
-  assert.deepEqual(
-    runInstalledCli(["init", "--root", runtimeRoot]),
-    { ok: true, workspace: ".agent-work/open" },
-  );
-  runInstalledCli([
-    "create",
-    "--root",
-    runtimeRoot,
-    "--id",
-    "installed-runtime-work",
-    "--name",
-    "Installed runtime work",
-    "--summary",
-    "Executes the installed workflow CLI and runtime graph.",
-    "--keywords",
-    '["installed","runtime","cli"]',
-    "--type",
-    "delivery",
-    "--goal",
-    "Validate the installed workflow runtime.",
-    "--success-criteria",
-    '["Installed workflow commands execute."]',
+  const opened = runInstalledCli([
+    "open", "--root", runtimeRoot, "--operation", "create", "--owner", "main", "--request",
+    JSON.stringify({ id: "installed-runtime-work", name: "Installed runtime work", summary: "Executes installed runtime.", type: "delivery", goal: "Validate the installed workflow runtime.", successCriteria: ["Installed workflow commands execute."] }),
   ]);
+  assert.equal(opened.ok, true);
   assert.deepEqual(
-    runInstalledCli(["validate", "--root", runtimeRoot]),
-    { valid: true, checked: 1, errors: [] },
+    runInstalledCli(["inspect", "--root", runtimeRoot, "--operation", "validate"]),
+    { ok: true, command: "inspect", data: { valid: true, checked: 1, errors: [] } },
   );
   const workRoot = path.join(
     runtimeRoot,

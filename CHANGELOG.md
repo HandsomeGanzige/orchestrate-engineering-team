@@ -4,6 +4,13 @@ Notable changes are recorded chronologically. Updates replace the current workfl
 
 ## Current
 
+### v0.3.0 - 2026-08-18
+
+- Replaced the low-level CLI with eight descriptor-driven intent commands and generated help, JSON Schemas, stable result/error contracts, allowlisted error codes, and examples.
+- Added immutable state-v2 global contracts and digests across descendants, Assignments, attempts, claims, gates, and role packets while retaining fail-closed Skill-local governance.
+- Narrowed role protocols: Development reports Git-derived changed surface and authoritative artifacts, Test/Review report evidence methods and structured findings, and Architecture returns advisory proposals for Main confirmation.
+- Exposed only persisted graph/evidence metrics and clarified that transient checks are not persisted proof and Skill-local enforcement is not operating-system isolation.
+
 ### Changed
 
 - Replaced JSON-in-Markdown Work Item indexes with one plain `work.md` per Main-owned Work Item and a disposable sibling `state.json` for operational coordination.

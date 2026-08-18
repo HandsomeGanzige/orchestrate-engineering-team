@@ -48,6 +48,13 @@ export const STANDARD_RETURN = Object.freeze([
   "review_reason",
   "blockers",
 ]);
+export const ARCHITECTURE_RETURN = Object.freeze([
+  "status", "summary", "artifacts", "decision_proposals", "files", "checks",
+  "requires_test", "test_reason", "requires_review", "review_reason", "blockers",
+]);
+export const VERIFICATION_RETURN = Object.freeze([
+  "status", "summary", "files", "checks", "evidence_method", "findings", "blockers",
+]);
 
 const REGISTRY_PATH =
   ".agents/skills/orchestrate-engineering-team/references/agent-profiles.yaml";
@@ -432,19 +439,20 @@ function normalizeReturnLabel(label) {
  * @param {string[]} labels - Extracted return-field labels in document order.
  * @param {number[]} lineNumbers - Source line for each extracted label.
  * @param {number} fallbackLine - Location used when fields are missing entirely.
+ * @param {string[]} [expected=STANDARD_RETURN] - Exact ordered fields required for the selected role.
  * @returns {void} Appends deterministic diagnostics for missing, unknown, or reordered fields.
  */
-function validateReturnContract(diagnostics, file, labels, lineNumbers, fallbackLine) {
+function validateReturnContract(diagnostics, file, labels, lineNumbers, fallbackLine, expected = STANDARD_RETURN) {
   const normalized = labels.map(normalizeReturnLabel);
-  const mismatch = STANDARD_RETURN.findIndex((field, index) => normalized[index] !== field);
-  if (mismatch !== -1 || normalized.length !== STANDARD_RETURN.length) {
-    const index = mismatch === -1 ? Math.min(normalized.length, STANDARD_RETURN.length - 1) : mismatch;
+  const mismatch = expected.findIndex((field, index) => normalized[index] !== field);
+  if (mismatch !== -1 || normalized.length !== expected.length) {
+    const index = mismatch === -1 ? Math.min(normalized.length, expected.length - 1) : mismatch;
     diagnostics.push(
       makeDiagnostic(
         file,
         location(lineNumbers[index] ?? fallbackLine, 1),
         "RETURN_CONTRACT",
-        `expected ordered fields: ${STANDARD_RETURN.join(", ")}; received: ${normalized.join(", ") || "none"}`,
+        `expected ordered fields: ${expected.join(", ")}; received: ${normalized.join(", ") || "none"}`,
       ),
     );
   }
@@ -1001,6 +1009,8 @@ function validateRegistry(diagnostics, document) {
         profile.returns,
         [],
         at(document, [...profilePath, "returns"]).line,
+        profileKey === "architecture" ? ARCHITECTURE_RETURN
+          : ["test", "review"].includes(profileKey) ? VERIFICATION_RETURN : STANDARD_RETURN,
       );
     }
   }
@@ -1035,7 +1045,9 @@ function validateRoleSkillReturn(diagnostics, file, source) {
       lineNumbers.push(index + 1);
     }
   }
-  validateReturnContract(diagnostics, file, labels, lineNumbers, heading + 1);
+  const expected = file.includes("architect-work-item") ? ARCHITECTURE_RETURN
+    : file.includes("verify-work-item") || file.includes("review-work-item") ? VERIFICATION_RETURN : STANDARD_RETURN;
+  validateReturnContract(diagnostics, file, labels, lineNumbers, heading + 1, expected);
 }
 
 /**

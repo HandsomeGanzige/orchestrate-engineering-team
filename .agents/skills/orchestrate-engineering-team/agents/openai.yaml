@@ -1,7 +1,7 @@
 interface:
   display_name: "Engineering Team Orchestrator"
-  short_description: "Coordinate plain-document engineering Work Items"
-  default_prompt: "Use $orchestrate-engineering-team to coordinate or resume this multi-role Work Item with one Main-owned work.md and separate operational state."
+  short_description: "Coordinate governed v0.3.0 engineering Work Items"
+  default_prompt: "Use $orchestrate-engineering-team v0.3.0 with its eight intent commands, immutable v2 contract, Main-owned work.md, and separate operational state."
 
 policy:
   allow_implicit_invocation: true

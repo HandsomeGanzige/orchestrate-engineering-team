@@ -1,6 +1,6 @@
 # orchestrate-engineering-team
 
-An open Agent Skill suite for coordinating substantial delivery and exploration through Main-owned semantic work items, bounded role assignments, independent verification, and optional recursive child workflows.
+An open Agent Skill suite (v0.3.0) for coordinating substantial delivery and exploration through Main-owned semantic work items, bounded role assignments, independent verification, and optional recursive child workflows.
 
 The five Skills use the open Agent Skills format and install project-locally from GitHub. Their end-to-end orchestration behavior targets Codex runtimes with native subagent support. `.agents/skills/` is the canonical product and source directory; the Codex Plugin files are an optional adapter that points to the same directory rather than carrying a second copy.
 
@@ -94,19 +94,21 @@ On completion, the helper curates the Work Item tree for archival, removes runti
 
 The four internal role Skills disable implicit invocation in their Codex UI metadata. They are meant to be attached explicitly by the Main Skill.
 
-Every normal role and Child Main dispatch explicitly sets `fork_turns: "none"`. A generated role packet carries only the Assignment, completion conditions, allowed scope, relevant confirmed decisions, exact authoritative project pointers, capabilities, and the fixed return envelope. Role results contain `status`, up to three `summary` entries, `artifacts`, `files`, concise `checks`, separate Test/Review votes and reasons, and actionable `blockers`; they are transient messages and omit process logs, private reasoning, parent-task restatement, and archived history.
+Every normal role and Child Main dispatch explicitly sets `fork_turns: "none"`. A generated packet carries the byte-identical immutable v2 global contract and digest inherited by every descendant, Assignment, and attempt, plus only the current bounded context. Development reports the exact Git-derived changed surface and authoritative changed artifacts; Test and Review report an evidence method and bounded structured findings; Architecture reports advisory decision proposals that Main must explicitly confirm. Role messages remain transient.
 
 Test and Review default to running for qualifying code work. They may be waived separately only after Development results exist and the deterministic vote rules find sufficient evidence that independent validation adds no meaningful signal.
 
 ## Deterministic workflow helper
 
-The Main Skill bundles `scripts/workflow.mjs`, a Node.js-built-in-only command-line helper for plain Work Item documents, separate coordination state, claims and leases, todos, operational Assignments, votes, child synchronization, compact packets and handoffs, open-work discovery, explicit history access, archival completion, and validation. It never starts or stops agents and does not execute production code:
+The Main Skill bundles `scripts/workflow.mjs`, a Node.js-built-in-only, descriptor-driven command-line helper. Its only public commands are `open`, `plan`, `next`, `dispatch`, `accept`, `resolve`, `close`, and `inspect`; legacy low-level commands, aliases, and v1 migration paths are removed. It never starts or stops agents and does not execute production code:
 
 ```bash
-node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <command> [options]
+node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <intent> --payload <file|->
 ```
 
-`work.md` is the single semantic document for its Work Item; sibling `state.json` is intentionally separate disposable machine coordination. Semantic boundaries use plain CommonMark ATX heading text with one to three leading spaces, optional closing hashes, collapsed whitespace, and case-insensitive reserved names; inline emphasis, code, links, and escapes are not normalized into reserved names. Valid fenced code and indented code are ignored, while Setext headings are deliberately ordinary content rather than workflow boundaries. The helper publishes the pair through a hash-only recovery journal, journals child creation until its parent projection is registered, removes operational state when archiving completed work, and keeps only a bounded non-semantic completion receipt for lost-response retries. Raw workspace paths are checked before normalization. Every complete high-level workflow command serializes through one atomic project-lock directory preceded by an atomically published creator claim carrying PID, nonce, and process-start identity; a live pre-owner creator is never reclaimed by elapsed age, while a provably dead creator authorizes recovery of its incomplete directory. Published owner recovery remains bound to the exact lock inode and the process-start token available from Linux `/proc` or macOS `ps`. Other platforms use a bounded heartbeat plus conservative PID liveness and never steal a claim or lock whose owner cannot be proven dead. Waiters create no owner records. Private archive stages and cleanup quarantines use unpredictable names plus captured filesystem identities; failed archive relocation is durably pre-journaled with both intended and previous identity-bound locations, and stale stages are removed only through inactive attempt journals while unrelated recovery data is retained. Cleanup authorization records source, descendant, trusted-root, and quarantine identities before rename-based ownership transfer, after which compliant workflow commands cannot access the detached object until removal finishes. The trust boundary is other same-user, out-of-band filesystem mutation: portable Node has no directory-handle-relative unlink API, so such a process can still race a pathname after an identity check and force a fail-closed interruption. The protocol does not claim to prevent that hostile mutation, expand cleanup authorization, or make descendant symlink targets eligible for deletion.
+Each intent descriptor generates `--help`, `--schema`, and `--examples` output, declares its payload JSON Schema, stable `{ok, command, data}` success shape, stable `{ok, command, error: {code, message}}` failure shape, and public error-code allowlist.
+
+`work.md` is the single semantic document for its Work Item; sibling state v2 is separate disposable machine coordination. `governance-v2.mjs` remains the fail-closed authority for immutable contracts, scope narrowing, capabilities, attempts, gates, exact resource claims, limits, Git attribution, and bounded evidence records. `inspect` metrics report only persisted graph/evidence counters; transient checks are not persisted proof. Skill and profile boundaries are advisory collaboration enforcement, not operating-system isolation.
 
 ## Runtime, permissions, and security boundaries
 
@@ -126,7 +128,7 @@ node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <command> 
 .codex-plugin/plugin.json         # optional Codex Plugin adapter manifest
 scripts/agent-profiles/            # standards and project-protocol checker
 scripts/release/                   # package, Skill install, and optional Plugin checks
-docs/acceptance-report.md     # C01-C20 deterministic/forward evidence record
+docs/acceptance-report.md     # C01-C24 deterministic/forward evidence record
 ```
 
 ## Validate locally

@@ -12,6 +12,7 @@ export {
   historyCommand,
   initWorkspace,
   listCommand,
+  metricsCommand,
   mutateWork,
   packetCommand,
   releaseWork,
@@ -21,4 +22,4 @@ export {
   voteCommand,
   workCommand,
 } from './workflow-runtime.mjs';
-export { loadInput, parseCli, runCli } from './cli-runtime.mjs';
+export { COMMAND_DESCRIPTORS, PUBLIC_COMMANDS, commandHelp, loadInput, parseCli, runCli } from './cli-runtime.mjs';

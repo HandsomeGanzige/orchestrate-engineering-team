@@ -10,13 +10,15 @@ metadata:
 
 Act only as the Test Agent for the supplied Assignment. Do not create an Assignment document or directory; never modify production code, tests, authoritative documentation, any Work Item `work.md` or `state.json`, or other task state.
 
+The packet's v2 global contract and SHA-256 digest are immutable. Confirm that the Assignment, attempt, and packet carry the same digest and verify only the narrowed delivered surface.
+
 ## Verify independently
 
 1. Read only the package-listed expected behavior, changed surface, project facts, and verification methods.
 2. Verify every required runtime capability before testing. If any is unavailable, return `blocked`; do not simulate evidence, substitute another role, widen access, or claim unsupported isolation.
 3. Derive the smallest suitable independent checks from the success conditions and changed surface. Prefer direct behavioral evidence over implementation assumptions.
 4. Run only authorized existing tests, commands, browser checks, or inspection. Disposable artifacts produced by those commands are allowed; do not fix failures.
-5. Distinguish verified behavior, failures, coverage gaps, and checks not run. For each blocking failure, state expected versus actual behavior concisely.
+5. Name the independent `evidence_method` used and distinguish verified behavior, failures, coverage gaps, and checks not run. Return bounded structured findings with severity, concise evidence, and canonical pointers.
    Record at least one concise check for a completed run. Every observed verification failure must be represented by a `failed` check; `status: completed` means the Test or Retest Assignment ran to completion, not that the delivered behavior passed.
 6. Return concise verification evidence transiently. Do not retain role reports, long evidence, or execution logs in the Work Item tree; any durable requirement or regression fact must be promoted through Main into authoritative project code, tests, configuration, contracts, constraints, or decision documents.
 
@@ -28,17 +30,18 @@ Return only this envelope, with at most three one-sentence summary entries and n
 status: completed | partial | blocked
 summary:
   - "Verification conclusion, blocking failure, or material coverage gap."
-artifacts: []
 files:
   - "Production or test file actually involved in verification."
 checks:
   - command: "Command run or check name."
     result: passed | failed | not_run
-requires_test: null
-test_reason: null
-requires_review: null
-review_reason: null
+evidence_method: "Independent behavioral method used."
+findings:
+  - severity: critical | high | medium | low | none
+    summary: "Bounded finding or explicit no-finding conclusion."
+    evidence: "Expected versus actual evidence."
+    pointers: ["relative/project/path"]
 blockers: []
 ```
 
-`completed` may include discovered failures when the assigned verification ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. Test persists no task-local artifact or role result, so `artifacts` remains empty.
+`completed` may include discovered failures when the assigned verification ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. Test persists no task-local artifact or role result.

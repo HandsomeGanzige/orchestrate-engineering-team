@@ -11,6 +11,23 @@ import {
   ensure,
 } from './workflow-contract.mjs';
 import { computeVotes } from './verification.mjs';
+import {
+  STATE_VERSION,
+  SUPPORTED_LIMITS,
+  aggregateUsage,
+  assertActiveClaimBinding,
+  assertCapabilities,
+  assertContractNarrowing,
+  assertDevelopmentClaims,
+  assertTopology,
+  assertWithinLimits,
+  canonicalJson,
+  claimsConflict,
+  contractDigest,
+  newContract,
+  refreshUsage,
+  scopeContains,
+} from './governance-v2.mjs';
 
 /**
  * Returns an ISO timestamp for the supplied clock.
@@ -107,15 +124,16 @@ export function newWorkMarkdown(input) {
  * @param {object} input - Creation payload.
  * @param {string|null} parent - Parent link.
  * @param {Date} now - Creation clock.
+ * @param {object|null} [inheritedContract=null] - Byte-identical parent contract for child work.
  * @returns {object} Operational state.
  */
-export function newWorkState(input, parent = null, now = new Date()) {
+export function newWorkState(input, parent = null, now = new Date(), inheritedContract = null) {
   validateId(input.id);
   const type = input.type ?? 'delivery';
   ensure(TYPES.has(type), 'invalid work type', 'INVALID_INPUT');
   const timestamp = nowIso(now);
   return {
-    version: 1,
+    version: STATE_VERSION,
     id: input.id,
     type,
     status: 'active',
@@ -126,13 +144,20 @@ export function newWorkState(input, parent = null, now = new Date()) {
     lease_minutes: LEASE_MINUTES,
     created_at: timestamp,
     updated_at: timestamp,
+    contract: newContract(input, inheritedContract),
+    limits: { ...SUPPORTED_LIMITS },
+    usage: { assignments: 0, active_assignments: 0, total_attempts: 0, claims: 0, findings: 0, conflicts: 0 },
     todos: [{ id: 'align-goal', text: 'Confirm the outcome, scope, and acceptance.', status: 'in_progress', assignment: '', blockers: [] }],
     assignments: [],
-    children: [],
+    attempts: [],
+    claims: [],
+    findings: [],
+    conflicts: [],
     verification: {
       votes: { architecture: null, development: [], main: null },
       decisions: { test: null, review: null },
     },
+    children: [],
     result: { status: 'pending', blockers: [] },
   };
 }
@@ -142,10 +167,11 @@ export function newWorkState(input, parent = null, now = new Date()) {
  * @param {object} input - Creation payload.
  * @param {string|null} parent - Parent link.
  * @param {Date} now - Creation clock.
+ * @param {object|null} [inheritedContract=null] - Byte-identical parent contract for child work.
  * @returns {object} Paired document.
  */
-export function newWorkDocument(input, parent = null, now = new Date()) {
-  return decorateWork({ kind: 'work', markdown: newWorkMarkdown(input), state: newWorkState(input, parent, now) });
+export function newWorkDocument(input, parent = null, now = new Date(), inheritedContract = null) {
+  return decorateWork({ kind: 'work', markdown: newWorkMarkdown(input), state: newWorkState(input, parent, now, inheritedContract) });
 }
 
 /**
@@ -321,7 +347,8 @@ export function decorateWork(document) {
   document.blocks = {
     goal: sectionBody(markdown, 'Outcome'), success_criteria: checklist(markdown, 'Acceptance'),
     confirmed_decisions: decisions(markdown), current_progress: sectionBody(markdown, 'Current focus'),
-    todo: state.todos, assignments: state.assignments, children: state.children,
+    todo: state.todos, assignments: state.assignments, attempts: state.attempts, claims: state.claims,
+    findings: state.findings, conflicts: state.conflicts, children: state.children,
     verification: state.verification,
     result: {
       status: state.result?.status ?? 'pending', summary: resultSummary(markdown), artifacts: resultArtifacts(markdown),
@@ -357,8 +384,11 @@ export function syncWork(document) {
   const { frontmatter, blocks, state } = document;
   for (const key of ['status', 'stage', 'parent', 'owner', 'lease_until', 'updated_at']) state[key] = frontmatter[key];
   state.todos = blocks.todo; state.assignments = blocks.assignments; state.children = blocks.children;
+  state.attempts = blocks.attempts; state.claims = blocks.claims;
+  state.findings = blocks.findings; state.conflicts = blocks.conflicts;
   state.verification = blocks.verification;
   state.result = { status: blocks.result.status, blockers: blocks.result.blockers };
+  refreshUsage(state);
   return document;
 }
 
@@ -500,11 +530,11 @@ export function validateState(state, { file = 'state.json' } = {}) {
   );
   exactKeys(state, [
     'version', 'id', 'type', 'status', 'stage', 'parent', 'owner', 'lease_until',
-    'lease_minutes', 'created_at', 'updated_at', 'todos', 'assignments', 'children',
-    'verification', 'result',
+    'lease_minutes', 'created_at', 'updated_at', 'contract', 'limits', 'usage', 'todos',
+    'assignments', 'attempts', 'claims', 'findings', 'conflicts', 'verification', 'children', 'result',
   ], 'state');
   validateId(state.id);
-  ensure(state.version === 1, 'unsupported state version', 'INVALID_DOCUMENT');
+  ensure(state.version === STATE_VERSION, 'unsupported state version', 'INVALID_DOCUMENT');
   ensure(TYPES.has(state.type), 'invalid work type', 'INVALID_DOCUMENT');
   ensure(STATUSES.has(state.status), 'invalid work status', 'INVALID_DOCUMENT');
   ensure(STAGES.has(state.stage), 'invalid work stage', 'INVALID_DOCUMENT');
@@ -519,7 +549,20 @@ export function validateState(state, { file = 'state.json' } = {}) {
   timestamp(state.created_at, 'created_at');
   timestamp(state.updated_at, 'updated_at');
   ensure(Date.parse(state.updated_at) >= Date.parse(state.created_at), 'updated_at precedes created_at', 'INVALID_DOCUMENT');
-  ensure(Array.isArray(state.todos) && Array.isArray(state.assignments) && Array.isArray(state.children), 'invalid coordination collections', 'INVALID_DOCUMENT');
+  exactKeys(state.contract, ['schema', 'root_work_id', 'objective', 'done_conditions', 'constraints', 'read_scope', 'write_scope', 'forbidden_changes', 'enforcement', 'digest'], 'contract');
+  ensure(state.contract.schema === 'workflow-global-contract-v1' && state.contract.enforcement === 'skill-local', 'unsupported global contract', 'INVALID_CONTRACT');
+  validateId(state.contract.root_work_id);
+  ensure(typeof state.contract.objective === 'string' && state.contract.objective.trim(), 'contract objective is invalid', 'INVALID_CONTRACT');
+  for (const field of ['done_conditions', 'constraints', 'read_scope', 'write_scope', 'forbidden_changes']) uniqueStrings(state.contract[field], `contract.${field}`);
+  ensure(state.contract.done_conditions.length > 0, 'contract done conditions are required', 'INVALID_CONTRACT');
+  for (const field of ['read_scope', 'write_scope', 'forbidden_changes']) for (const pointer of state.contract[field]) {
+    if (pointer !== '**') scope(pointer, `contract.${field}`);
+  }
+  ensure(state.contract.digest === contractDigest(state.contract), 'contract digest does not match canonical bytes', 'INVALID_CONTRACT');
+  ensure(Array.isArray(state.todos) && Array.isArray(state.assignments) && Array.isArray(state.attempts)
+    && Array.isArray(state.claims) && Array.isArray(state.findings) && Array.isArray(state.conflicts)
+    && Array.isArray(state.children), 'invalid coordination collections', 'INVALID_DOCUMENT');
+  assertWithinLimits(state);
   /**
    * Validates identity collections.
    * @param {object[]} items - Identity records.
@@ -530,7 +573,8 @@ export function validateState(state, { file = 'state.json' } = {}) {
     if (!item || typeof item.id !== 'string') return false;
     try { validateId(item.id); return true; } catch { return false; }
   }) && new Set(items.map((item) => item.id)).size === items.length, `${label} must have valid unique IDs`, 'INVALID_DOCUMENT');
-  unique(state.todos, 'todos'); unique(state.assignments, 'assignments'); unique(state.children, 'children');
+  unique(state.todos, 'todos'); unique(state.assignments, 'assignments'); unique(state.attempts, 'attempts');
+  unique(state.claims, 'claims'); unique(state.findings, 'findings'); unique(state.conflicts, 'conflicts'); unique(state.children, 'children');
   for (const todo of state.todos) {
     exactKeys(todo, ['id', 'text', 'status', 'assignment', 'blockers'], `todo ${todo.id}`);
     ensure(typeof todo.text === 'string' && todo.text.trim(), `todo ${todo.id} text is invalid`, 'INVALID_DOCUMENT');
@@ -552,19 +596,31 @@ export function validateState(state, { file = 'state.json' } = {}) {
   for (const assignment of state.assignments) {
     exactKeys(assignment, [
       'id', 'role', 'status', 'objective', 'successCriteria', 'read', 'write', 'decisions',
-      'capabilities', 'agentId', 'dependsOn', 'sharedInterfaceStable', 'touchesGlobal',
-      'integrator', 'blockers', 'receipt',
+      'contract_digest', 'capabilities', 'topology', 'claim_specs', 'current_attempt',
+      'agentId', 'dependsOn', 'blockers', 'receipt',
     ], `assignment ${assignment.id}`);
     ensure(ROLES.has(assignment.role) && ASSIGNMENT_STATUSES.has(assignment.status), `assignment ${assignment.id} role or status is invalid`, 'INVALID_DOCUMENT');
     ensure(typeof assignment.objective === 'string' && assignment.objective.trim(), `assignment ${assignment.id} objective is invalid`, 'INVALID_DOCUMENT');
     for (const field of ['successCriteria', 'read', 'write', 'decisions', 'dependsOn', 'blockers']) {
       uniqueStrings(assignment[field], `assignment ${assignment.id} ${field}`);
     }
+    for (const pointer of assignment.read) scope(pointer, `assignment ${assignment.id} read scope`);
     for (const pointer of assignment.write) scope(pointer, `assignment ${assignment.id} write scope`);
     exactKeys(assignment.capabilities, ['required', 'available', 'unavailable'], `assignment ${assignment.id} capabilities`);
     for (const field of ['required', 'available', 'unavailable']) uniqueStrings(assignment.capabilities[field], `assignment ${assignment.id} capabilities.${field}`);
-    ensure(typeof assignment.agentId === 'string' && typeof assignment.integrator === 'string', `assignment ${assignment.id} agent or integrator is invalid`, 'INVALID_DOCUMENT');
-    ensure(typeof assignment.sharedInterfaceStable === 'boolean' && typeof assignment.touchesGlobal === 'boolean', `assignment ${assignment.id} parallel safety is invalid`, 'INVALID_DOCUMENT');
+    assertCapabilities(assignment.capabilities);
+    ensure(assignment.contract_digest === state.contract.digest, `assignment ${assignment.id} contract digest is invalid`, 'INVALID_CONTRACT');
+    assertContractNarrowing(state.contract, assignment);
+    assertTopology(assignment.topology);
+    ensure(Array.isArray(assignment.claim_specs), `assignment ${assignment.id} claim_specs must be an array`, 'INVALID_CLAIM');
+    for (const claim of assignment.claim_specs) {
+      exactKeys(claim, ['kind', 'key', 'mode'], `assignment ${assignment.id} claim_spec`);
+      ensure(['path', 'resource', 'global'].includes(claim.kind) && typeof claim.key === 'string' && claim.key
+        && ['exclusive', 'shared'].includes(claim.mode), `assignment ${assignment.id} claim_spec is invalid`, 'INVALID_CLAIM');
+      if (claim.kind === 'path') scope(claim.key, `assignment ${assignment.id} claim path`);
+    }
+    assertDevelopmentClaims(assignment);
+    ensure(typeof assignment.current_attempt === 'string' && typeof assignment.agentId === 'string', `assignment ${assignment.id} agent or current attempt is invalid`, 'INVALID_DOCUMENT');
     ensure(
       (assignment.status === 'blocked') === (assignment.blockers.length > 0),
       `assignment ${assignment.id} blockers do not match its status`,
@@ -584,7 +640,11 @@ export function validateState(state, { file = 'state.json' } = {}) {
       }
       if (assignment.role === 'development') {
         uniqueStrings(assignment.receipt.changed_surface, `assignment ${assignment.id} changed surface`);
-        for (const pointer of assignment.receipt.changed_surface) scope(pointer, `assignment ${assignment.id} changed surface`);
+        for (const pointer of assignment.receipt.changed_surface) {
+          scope(pointer, `assignment ${assignment.id} changed surface`);
+          ensure(assignment.write.some((writeScope) => scopeContains(writeScope, pointer)), `assignment ${assignment.id} changed surface escapes its write scope`, 'INVALID_GIT_SCOPE');
+          ensure(!state.contract.forbidden_changes.some((forbidden) => scopeContains(forbidden, pointer)), `assignment ${assignment.id} changed surface is forbidden`, 'INVALID_GIT_SCOPE');
+        }
       } else ensure(!Object.hasOwn(assignment.receipt, 'changed_surface'), `assignment ${assignment.id} has an unrelated changed surface`, 'INVALID_DOCUMENT');
       if (['architecture', 'development'].includes(assignment.role)) {
         vote(assignment.receipt.votes, `assignment ${assignment.id} receipt votes`);
@@ -640,9 +700,12 @@ export function validateState(state, { file = 'state.json' } = {}) {
     for (let rightIndex = leftIndex + 1; rightIndex < activeDevelopment.length; rightIndex += 1) {
       const left = activeDevelopment[leftIndex]; const right = activeDevelopment[rightIndex];
       ensure(!left.dependsOn.includes(right.id) && !right.dependsOn.includes(left.id), 'parallel Development assignments cannot depend on each other', 'INVALID_DOCUMENT');
-      ensure(left.sharedInterfaceStable && right.sharedInterfaceStable, 'parallel Development requires stable shared interfaces', 'INVALID_DOCUMENT');
-      ensure(!left.touchesGlobal && !right.touchesGlobal, 'parallel Development cannot touch global files', 'INVALID_DOCUMENT');
-      ensure(left.integrator && left.integrator === right.integrator, 'parallel Development requires one named integrator', 'INVALID_DOCUMENT');
+      ensure(left.topology.mode === 'parallel' && right.topology.mode === 'parallel'
+        && left.topology.group === right.topology.group, 'parallel Development requires one explicit topology group', 'INVALID_DOCUMENT');
+      ensure(left.topology.independent && right.topology.independent
+        && left.topology.shared_interface_stable && right.topology.shared_interface_stable, 'parallel Development requires stable independent work', 'INVALID_DOCUMENT');
+      ensure(!left.topology.touches_global && !right.topology.touches_global, 'parallel Development cannot touch global files', 'INVALID_DOCUMENT');
+      ensure(left.topology.integrator && left.topology.integrator === right.topology.integrator, 'parallel Development requires one named integrator', 'INVALID_DOCUMENT');
       ensure(
         !left.write.some((leftScope) => right.write.some((rightScope) => leftScope === rightScope
           || leftScope.startsWith(`${rightScope}/`) || rightScope.startsWith(`${leftScope}/`))),
@@ -650,6 +713,87 @@ export function validateState(state, { file = 'state.json' } = {}) {
         'INVALID_DOCUMENT',
       );
     }
+  }
+  const attempts = new Map(state.attempts.map((item) => [item.id, item]));
+  for (const attempt of state.attempts) {
+    exactKeys(attempt, ['id', 'assignment_id', 'ordinal', 'status', 'agent_id', 'contract_digest', 'started_at', 'ended_at', 'gates', 'git_baseline', 'receipt', 'blockers'], `attempt ${attempt.id}`);
+    const assignment = assignments.get(attempt.assignment_id);
+    ensure(assignment, `attempt ${attempt.id} assignment does not resolve`, 'INVALID_DOCUMENT');
+    ensure(Number.isInteger(attempt.ordinal) && attempt.ordinal >= 1 && attempt.ordinal <= state.limits.attempts_per_assignment, `attempt ${attempt.id} ordinal is invalid`, 'INVALID_DOCUMENT');
+    ensure(['in_progress', 'completed', 'blocked'].includes(attempt.status), `attempt ${attempt.id} status is invalid`, 'INVALID_DOCUMENT');
+    ensure(typeof attempt.agent_id === 'string' && attempt.agent_id.trim(), `attempt ${attempt.id} agent is invalid`, 'INVALID_DOCUMENT');
+    ensure(attempt.contract_digest === state.contract.digest && attempt.contract_digest === assignment.contract_digest, `attempt ${attempt.id} contract digest is invalid`, 'INVALID_CONTRACT');
+    timestamp(attempt.started_at, `attempt ${attempt.id} started_at`);
+    ensure(typeof attempt.ended_at === 'string', `attempt ${attempt.id} ended_at is invalid`, 'INVALID_DOCUMENT');
+    if (attempt.status === 'in_progress') ensure(!attempt.ended_at && attempt.receipt === null && attempt.blockers.length === 0, `attempt ${attempt.id} active state is invalid`, 'INVALID_DOCUMENT');
+    else timestamp(attempt.ended_at, `attempt ${attempt.id} ended_at`);
+    ensure(Array.isArray(attempt.gates), `attempt ${attempt.id} gates must be an array`, 'APPROVAL_REQUIRED');
+    for (const gate of attempt.gates) {
+      exactKeys(gate, ['id', 'status', 'approved_by', 'approved_at'], `attempt ${attempt.id} gate`);
+      ensure(typeof gate.id === 'string' && gate.id && gate.status === 'approved' && typeof gate.approved_by === 'string' && gate.approved_by, `attempt ${attempt.id} has an unapproved gate`, 'APPROVAL_REQUIRED');
+      timestamp(gate.approved_at, `attempt ${attempt.id} gate approval`);
+    }
+    uniqueStrings(attempt.blockers, `attempt ${attempt.id} blockers`);
+    ensure((attempt.status === 'blocked') === (attempt.blockers.length > 0), `attempt ${attempt.id} blockers do not match status`, 'INVALID_DOCUMENT');
+    if (assignment.role === 'development') {
+      exactKeys(attempt.git_baseline, ['repository', 'head'], `attempt ${attempt.id} git baseline`);
+      ensure(attempt.git_baseline.repository === '.' && /^[a-f0-9]{40,64}$/.test(attempt.git_baseline.head), `attempt ${attempt.id} git baseline is invalid`, 'INVALID_GIT_SCOPE');
+    } else ensure(attempt.git_baseline === null, `attempt ${attempt.id} has unrelated Git state`, 'INVALID_GIT_SCOPE');
+    if (attempt.receipt !== null) {
+      const receiptKeys = ['status'];
+      if (assignment.current_attempt === attempt.id && assignment.status === 'completed') receiptKeys.push('completed_order');
+      if (assignment.role === 'development') receiptKeys.push('changed_surface');
+      if (['architecture', 'development'].includes(assignment.role)) receiptKeys.push('votes');
+      if (['test', 'retest', 'review', 'rereview'].includes(assignment.role)) receiptKeys.push('passed');
+      exactKeys(attempt.receipt, receiptKeys, `attempt ${attempt.id} receipt`);
+      ensure(['completed', 'partial', 'blocked'].includes(attempt.receipt.status), `attempt ${attempt.id} receipt status is invalid`, 'INVALID_DOCUMENT');
+      if (receiptKeys.includes('completed_order')) ensure(Number.isInteger(attempt.receipt.completed_order) && attempt.receipt.completed_order > 0, `attempt ${attempt.id} receipt completion order is invalid`, 'INVALID_DOCUMENT');
+      if (assignment.role === 'development') {
+        uniqueStrings(attempt.receipt.changed_surface, `attempt ${attempt.id} changed surface`);
+        for (const pointer of attempt.receipt.changed_surface) {
+          scope(pointer, `attempt ${attempt.id} changed surface`);
+          ensure(assignment.write.some((writeScope) => scopeContains(writeScope, pointer)), `attempt ${attempt.id} changed surface escapes its write scope`, 'INVALID_GIT_SCOPE');
+          ensure(!state.contract.forbidden_changes.some((forbidden) => scopeContains(forbidden, pointer)), `attempt ${attempt.id} changed surface is forbidden`, 'INVALID_GIT_SCOPE');
+        }
+      }
+      if (['architecture', 'development'].includes(assignment.role)) vote(attempt.receipt.votes, `attempt ${attempt.id} receipt votes`);
+      if (['test', 'retest', 'review', 'rereview'].includes(assignment.role)) ensure(typeof attempt.receipt.passed === 'boolean', `attempt ${attempt.id} receipt pass result is invalid`, 'INVALID_DOCUMENT');
+    }
+    if (attempt.status === 'completed') ensure(attempt.receipt?.status === 'completed', `attempt ${attempt.id} requires a completed receipt`, 'INVALID_DOCUMENT');
+    if (attempt.status === 'blocked') ensure(['partial', 'blocked'].includes(attempt.receipt?.status) || attempt.receipt === null, `attempt ${attempt.id} blocked receipt is invalid`, 'INVALID_DOCUMENT');
+  }
+  for (const assignment of state.assignments) {
+    const owned = state.attempts.filter((attempt) => attempt.assignment_id === assignment.id).sort((a, b) => a.ordinal - b.ordinal);
+    ensure(owned.every((attempt, index) => attempt.ordinal === index + 1), `assignment ${assignment.id} attempt ordinals are not contiguous`, 'INVALID_DOCUMENT');
+    ensure(assignment.current_attempt === (owned.at(-1)?.id ?? ''), `assignment ${assignment.id} current attempt is stale`, 'INVALID_DOCUMENT');
+    if (assignment.status === 'in_progress') ensure(['in_progress', 'completed'].includes(attempts.get(assignment.current_attempt)?.status), `assignment ${assignment.id} lacks an active or completed attempt`, 'INVALID_DOCUMENT');
+    if (assignment.status === 'completed') ensure(attempts.get(assignment.current_attempt)?.status === 'completed', `assignment ${assignment.id} lacks a completed attempt`, 'INVALID_DOCUMENT');
+    const activeAttempt = attempts.get(assignment.current_attempt);
+    if (activeAttempt?.receipt !== null || assignment.receipt !== null) ensure(canonicalJson(activeAttempt?.receipt ?? null) === canonicalJson(assignment.receipt), `assignment ${assignment.id} receipt differs from its current attempt`, 'INVALID_DOCUMENT');
+    if (activeAttempt?.status === 'in_progress') assertActiveClaimBinding(state, assignment, activeAttempt);
+  }
+  const claims = new Map(state.claims.map((item) => [item.id, item]));
+  for (const claim of state.claims) {
+    exactKeys(claim, ['id', 'assignment_id', 'attempt_id', 'kind', 'key', 'mode', 'status', 'acquired_at', 'released_at'], `claim ${claim.id}`);
+    ensure(assignments.has(claim.assignment_id) && attempts.get(claim.attempt_id)?.assignment_id === claim.assignment_id, `claim ${claim.id} references are invalid`, 'INVALID_CLAIM');
+    ensure(['path', 'resource', 'global'].includes(claim.kind) && typeof claim.key === 'string' && claim.key
+      && ['exclusive', 'shared'].includes(claim.mode) && ['active', 'released'].includes(claim.status), `claim ${claim.id} is invalid`, 'INVALID_CLAIM');
+    if (claim.kind === 'path') scope(claim.key, `claim ${claim.id} key`);
+    timestamp(claim.acquired_at, `claim ${claim.id} acquired_at`);
+    ensure(typeof claim.released_at === 'string', `claim ${claim.id} released_at is invalid`, 'INVALID_CLAIM');
+    if (claim.status === 'active') ensure(!claim.released_at && attempts.get(claim.attempt_id)?.status === 'in_progress', `claim ${claim.id} active state is invalid`, 'INVALID_CLAIM');
+    else timestamp(claim.released_at, `claim ${claim.id} released_at`);
+  }
+  for (let left = 0; left < state.claims.length; left += 1) for (let right = left + 1; right < state.claims.length; right += 1) {
+    ensure(!claimsConflict(state.claims[left], state.claims[right]), `resource claims conflict: ${state.claims[left].id} and ${state.claims[right].id}`, 'CLAIM_CONFLICT');
+  }
+  for (const collection of ['findings', 'conflicts']) for (const record of state[collection]) {
+    exactKeys(record, ['id', 'assignment_id', 'attempt_id', 'summary', 'pointers'], `${collection} ${record.id}`);
+    ensure(assignments.has(record.assignment_id) && attempts.get(record.attempt_id)?.assignment_id === record.assignment_id, `${collection} ${record.id} references are invalid`, 'INVALID_DOCUMENT');
+    ensure(typeof record.summary === 'string' && record.summary.length > 0 && record.summary.length <= 500, `${collection} ${record.id} summary is invalid`, 'INVALID_DOCUMENT');
+    uniqueStrings(record.pointers, `${collection} ${record.id} pointers`);
+    ensure(record.pointers.length <= 10, `${collection} ${record.id} pointers are unbounded`, 'INVALID_DOCUMENT');
+    for (const pointer of record.pointers) scope(pointer, `${collection} ${record.id} pointer`);
   }
   exactKeys(state.verification, ['votes', 'decisions'], 'verification');
   exactKeys(state.verification.votes, ['architecture', 'development', 'main'], 'verification votes');

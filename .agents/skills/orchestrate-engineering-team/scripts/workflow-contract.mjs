@@ -12,7 +12,7 @@ export const FORBIDDEN_IDS = new Set([
   ...STAGES,
   'implementation',
 ]);
-export const RESULT_KEYS = new Set([
+export const DEVELOPMENT_RESULT_KEYS = new Set([
   'status',
   'summary',
   'artifacts',
@@ -23,6 +23,51 @@ export const RESULT_KEYS = new Set([
   'requires_review',
   'review_reason',
   'blockers',
+]);
+
+export const ARCHITECTURE_RESULT_KEYS = new Set([
+  ...DEVELOPMENT_RESULT_KEYS,
+  'decision_proposals',
+]);
+
+export const VERIFICATION_RESULT_KEYS = new Set([
+  'status',
+  'summary',
+  'files',
+  'checks',
+  'evidence_method',
+  'findings',
+  'blockers',
+]);
+
+/**
+ * Returns the exact immutable result field set for one role.
+ * @param {string} role - Assignment role selecting the narrowed schema.
+ * @returns {Set<string>} Exact allowed result fields.
+ */
+export function resultKeysForRole(role) {
+  if (role === 'architecture') return ARCHITECTURE_RESULT_KEYS;
+  if (role === 'development') return DEVELOPMENT_RESULT_KEYS;
+  return VERIFICATION_RESULT_KEYS;
+}
+
+/** Stable public error-code allowlist used by every descriptor-generated CLI contract. */
+export const ERROR_CODES = Object.freeze([
+  'ALREADY_EXISTS', 'APPROVAL_REQUIRED', 'ASSIGNMENT_DIRECTORY', 'ATOMIC_FAILURE',
+  'CAPABILITY_UNAVAILABLE', 'CLAIM_CONFLICT', 'CONTRACT_WIDENING', 'DIRTY_GIT_SCOPE',
+  'HISTORY_READ_ONLY', 'INCOMPLETE_CHILD_PROJECTION', 'INCOMPLETE_DESCENDANT',
+  'INCOMPLETE_RESULT', 'INCOMPLETE_VOTE', 'INCOMPLETE_WORK', 'INELIGIBLE_CHILD',
+  'INTERNAL_ERROR', 'INVALID_ARCHIVE', 'INVALID_CHILD_LINK', 'INVALID_CLAIM',
+  'INVALID_COMMAND', 'INVALID_CONTRACT', 'INVALID_DOCUMENT', 'INVALID_GIT_SCOPE',
+  'INVALID_INPUT', 'INVALID_LIMITS', 'INVALID_PARENT', 'INVALID_RESULT',
+  'INVALID_SCOPE', 'INVALID_SUCCESS_EVIDENCE', 'INVALID_TOPOLOGY', 'INVALID_TRANSITION',
+  'INVALID_USAGE', 'INVALID_VOTE', 'INVALID_VOTE_DECISION', 'INVALID_WORKSPACE',
+  'LEASE_CONFLICT', 'LEASE_EXPIRED', 'LIMIT_EXCEEDED', 'LOCKED',
+  'MISSING_DEVELOPMENT_EVIDENCE', 'MISSING_SUCCESS_EVIDENCE',
+  'MISSING_VERIFICATION_DECISION', 'MISSING_VERIFICATION_EVIDENCE', 'NOT_FOUND',
+  'ORPHAN_CHILD', 'OWNER_MISMATCH', 'OWNER_REQUIRED', 'PARALLEL_CONFLICT',
+  'TODO_CONFLICT', 'UNARCHIVED_COMPLETION', 'UNRECONCILED_ASSIGNMENT',
+  'UNRECONCILED_TODO', 'UNRESOLVED_BLOCKERS', 'WORKFLOW_ERROR', 'WORK_NOT_FOUND',
 ]);
 
 export class WorkflowError extends Error {

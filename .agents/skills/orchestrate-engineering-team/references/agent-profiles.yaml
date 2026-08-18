@@ -14,12 +14,13 @@ profiles:
       prohibited: [task-state-write, user-decision]
     context:
       - assignment-id
+      - attempt-id-and-immutable-contract-digest
       - objective-and-done-conditions
       - confirmed-decisions
       - exact-project-fact-pointers
       - allowed-read-and-write-scope
       - capability-availability
-    returns: &concise-envelope
+    returns: &development-envelope
       - status
       - summary
       - artifacts
@@ -44,12 +45,20 @@ profiles:
       prohibited: [production-write, test-write, task-state-write, user-decision]
     context:
       - assignment-id
+      - attempt-id-and-immutable-contract-digest
       - expected-behavior-and-done-conditions
       - changed-surface
       - exact-project-fact-pointers
       - available-verification-methods
       - capability-availability
-    returns: *concise-envelope
+    returns: &verification-envelope
+      - status
+      - summary
+      - files
+      - checks
+      - evidence_method
+      - findings
+      - blockers
 
   review:
     name: Review Agent
@@ -64,12 +73,13 @@ profiles:
       prohibited: [production-write, test-write, task-state-write, user-decision]
     context:
       - assignment-id
+      - attempt-id-and-immutable-contract-digest
       - confirmed-goal-and-decisions
       - changed-surface
       - exact-project-fact-pointers
       - concise-verification-summary
       - capability-availability
-    returns: *concise-envelope
+    returns: *verification-envelope
 
   architecture:
     name: Architecture Agent
@@ -84,8 +94,20 @@ profiles:
       prohibited: [production-write, task-state-write, user-decision]
     context:
       - assignment-id
+      - attempt-id-and-immutable-contract-digest
       - objective-and-done-conditions
       - confirmed-constraints-and-decisions
       - exact-project-fact-pointers
       - capability-availability
-    returns: *concise-envelope
+    returns:
+      - status
+      - summary
+      - artifacts
+      - decision_proposals
+      - files
+      - checks
+      - requires_test
+      - test_reason
+      - requires_review
+      - review_reason
+      - blockers

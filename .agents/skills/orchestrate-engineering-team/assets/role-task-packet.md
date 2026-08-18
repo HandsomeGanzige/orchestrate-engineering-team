@@ -1,7 +1,16 @@
 # Assignment package
 
+Protocol: `orchestrate-engineering-team/v0.3.0`
+
 Assignment ID: <semantic-assignment-id>
-Role: <Architecture | Development | Test | Review>
+Attempt ID: <assignment-id-attempt-n>
+Role: <Architecture | Development | Test | Review | Retest | Rereview>
+
+## Immutable v2 global contract
+
+Contract digest: `<sha256>`
+
+<Byte-identical contract inherited from the root Work Item. The Assignment, attempt, and packet must carry the same digest; roles may narrow but never widen it.>
 
 ## Objective and done conditions
 
@@ -41,7 +50,7 @@ Spawn this role with `fork_turns: "none"`. The role must not create or modify an
 
 ## Return
 
-Return only the following YAML. Role returns are transient messages and must not be persisted as task-local history. Do not include progress narration, private reasoning, full logs, the parent task, or unknown fields.
+Return only the schema for the selected role. Role returns are transient messages and must not be persisted as task-local history. Do not include progress narration, private reasoning, full logs, the parent task, or unknown fields.
 
 ```yaml
 status: completed | partial | blocked
@@ -62,5 +71,6 @@ review_reason: "One-sentence reason or null."
 blockers: []
 ```
 
-Architecture and Development return boolean votes and reasons. Test and Review return `null` for both votes and reasons. `partial` and `blocked` require actionable blockers.
-Only Development may list authorized authoritative project artifacts it changed; Architecture, Test, Retest, Review, and Rereview must return `artifacts: []`.
+Development uses the envelope above with boolean votes, the exact Git-derived changed surface in `files`, and authoritative changed project artifacts. Architecture uses the same envelope with `artifacts: []` plus `decision_proposals` entries containing exactly `id`, `summary`, `options`, and `recommendation`; proposals remain advisory until Main confirms them.
+
+Test, Retest, Review, and Rereview omit `artifacts` and all four vote fields. They add `evidence_method` and bounded `findings`; each finding contains exactly `severity`, `summary`, `evidence`, and canonical `pointers`. `partial` and `blocked` require actionable blockers.

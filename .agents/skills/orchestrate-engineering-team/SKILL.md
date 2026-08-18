@@ -22,26 +22,28 @@ If orchestration applies, require native subagent dispatch with explicit empty-h
 
 ## Use the workflow model
 
-- A **Work Item** is an independently acceptable, resumable delivery or exploration goal. It has one `index.md`, owned by one Main.
-- An **Assignment** is one bounded Architecture, Development, Test, Review, Retest, or Rereview execution. Record it in the owning Work Item; never create a directory or `index.md` for it.
-- A **Material** is retained task-local evidence or design work. Architecture may write only assigned `materials/architecture/` paths. Test and Review may write only assigned `materials/test/` or `materials/review/` paths, and only for long evidence worth retaining. Development writes no task materials by default.
-- A **Child Work Item** is an independently acceptable subgoal that needs multiple Todos, role coordination, or cross-session recovery. A step, stage, single Todo, or role execution is not a child.
+- A **Work Item** is an independently acceptable, resumable delivery or exploration goal. Each Work Item Main owns exactly one plain-Markdown `work.md` as its semantic document.
+- A sibling **`state.json`** holds disposable operational coordination while the Work Item is open. It is machine state, not a second semantic task document, and is removed rather than archived at completion.
+- An **Assignment** is one bounded Architecture, Development, Test, Review, Retest, or Rereview execution. It has no document or directory, and its role envelope is a transient message rather than retained history.
+- A **Child Work Item** is an independently acceptable subgoal that needs multiple Todos, role coordination, or cross-session recovery. Its Child Main independently owns the child's `work.md`; a step, stage, single Todo, or role execution is not a child.
 
-Main is the sole writer of its Work Item `index.md`. A Child Main writes only its child index; ordinary roles write no task index. These are collaboration constraints, not filesystem security guarantees.
+Main is the sole semantic writer of its Work Item `work.md` and the sole task-state writer for its sibling `state.json`. A Child Main writes only its own child documents. Ordinary roles write neither file. These are collaboration constraints, not filesystem security guarantees.
 
 ## Run the Main workflow
 
 1. Read [state-and-voting.md](references/state-and-voting.md) when creating, resuming, transitioning, validating, or closing a Work Item.
-2. Use `node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <command>` for initialization, creation, claims, Todos, Assignments, results, votes, children, materials, search, handoff, and validation. Let the script use the bundled assets; do not hand-maintain controlled blocks.
+2. Use `node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <command>` for initialization, creation, claims, Todos, operational Assignments and votes, children, context-safe discovery, handoff, completion, history access, and validation. Let the helper maintain `state.json`; keep `work.md` direct Markdown with no frontmatter, fenced JSON, raw role envelopes, or execution logs.
 3. Move through `align -> design -> develop -> verify -> close`. Skip `design` when no substantive architecture decision is needed. Keep exactly one Todo in progress for each active Work Item.
-4. Make Architecture, Development, Test, and Review bounded Assignments. Main integrates their concise results into its index; role completion never implies Work Item completion.
+4. Make Architecture, Development, Test, and Review bounded Assignments. Their concise returns are transient: promote durable engineering facts into project code, tests, configuration, contracts, constraints, or decision documents, and update `work.md` only with useful delivery facts and references. Role completion never implies Work Item completion.
 5. Default medium and large code changes to independent Test and Review. After the final Development result is known, calculate their exemption votes separately as defined in the reference. Run every role not validly exempted.
 6. Route a Test or Review finding to a Development Assignment. After a Test fix, rerun only Test; after a Review fix, rerun only Review unless the fix changes a shared interface or introduces a new behavior surface that warrants a fresh vote.
-7. Complete only after success criteria, required verification, descendants, blockers, and residual issues are reconciled. Main records the final result and reports it to the user.
+7. Complete only after success criteria, required verification, descendants, blockers, and residual issues are reconciled. Curate `work.md` into a factual user-readable delivery record, remove runtime-only `state.json`, retain the completed tree in the archive, and report the result to the user.
+
+Normal Agent context excludes the retained archive. Use explicit history access to locate lightweight completed candidates, then read only the selected `work.md`.
 
 ## Dispatch minimal Assignments
 
-Read only the selected entry in [agent-profiles.yaml](references/agent-profiles.yaml), then generate a package shaped by [role-task-packet.md](assets/role-task-packet.md). Include only the Assignment, done conditions, allowed read/write scopes, exact project and Material pointers, directly relevant confirmed decisions, capability availability, and the fixed return schema. Never include the full parent conversation, ancestor or sibling indexes, unrelated history, full role reports, or tool logs.
+Read only the selected entry in [agent-profiles.yaml](references/agent-profiles.yaml), then generate a package shaped by [role-task-packet.md](assets/role-task-packet.md). Include only the Assignment, done conditions, allowed read/write scopes, exact authoritative project pointers, directly relevant confirmed decisions, capability availability, and the fixed return schema. Never include the full parent conversation, ancestor or sibling documents, archived Work Items, unrelated history, prior role envelopes, or tool logs.
 
 Every role spawn must explicitly use:
 
@@ -59,10 +61,10 @@ Parallelize Development Assignments only when they have no ordering dependency, 
 
 Create a child only when it meets every Child Work Item condition in the state reference and stays inside the confirmed parent scope. Main may do this without redundant user confirmation.
 
-Spawn the Child Main with this same Skill and explicit `fork_turns: "none"`. Give it only its child entry, confirmed bounded outcome, parent result contract, capability facts, and exact pointers. The Child Main owns only the child index and returns a concise completion event; the parent Main updates the parent index or later uses `child sync`.
+Spawn the Child Main with this same Skill and explicit `fork_turns: "none"`. Give it only the child delivery contract, its document link, confirmed bounded outcome, parent acceptance and result contract, capability facts, and exact pointers. The Child Main owns only its child `work.md` and sibling `state.json` and returns a concise completion event. The parent never mirrors child internals; it retains only the contract, link, acceptance, returned result, and artifact references.
 
 ## Load resources progressively
 
-- Read [state-and-voting.md](references/state-and-voting.md) for schemas, lifecycle, child rules, votes, and completion invariants.
+- Read [state-and-voting.md](references/state-and-voting.md) for document/state separation, lifecycle, child rules, votes, history access, and completion invariants.
 - Read the selected profile only in [agent-profiles.yaml](references/agent-profiles.yaml) immediately before dispatch.
 - Treat files under `assets/` as script-consumed output templates; do not load them merely to operate the workflow.

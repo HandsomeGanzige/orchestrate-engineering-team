@@ -21,6 +21,9 @@ export function validateRoleResult(result, role) {
   ensure(Array.isArray(result.summary) && result.summary.length <= 3, 'summary is limited to three items', 'INVALID_RESULT');
   result.summary.forEach((value, index) => boundedString(value, `summary[${index}]`));
   ensure(Array.isArray(result.artifacts) && result.artifacts.length <= 30, 'artifacts must be a bounded array', 'INVALID_RESULT');
+  if (['architecture', 'test', 'retest', 'review', 'rereview'].includes(role)) {
+    ensure(result.artifacts.length === 0, `${role} result artifacts must be empty`, 'INVALID_RESULT');
+  }
   for (const artifact of result.artifacts) {
     ensure(
       artifact
@@ -83,14 +86,11 @@ export function validateRoleResult(result, role) {
 /**
  * Projects Test and Review recommendations from a validated role result.
  *
- * @param {object} result - Validated Architecture or Development result envelope.
+ * @param {object} receipt - Architecture or Development operational receipt.
  * @returns {{test: {requires: boolean, reason: string}, review: {requires: boolean, reason: string}}} Dimension-specific votes.
  */
-export function resultVote(result) {
-  return {
-    test: { requires: result.requires_test, reason: result.test_reason },
-    review: { requires: result.requires_review, reason: result.review_reason },
-  };
+export function receiptVote(receipt) {
+  return receipt.votes;
 }
 
 /**
@@ -103,8 +103,9 @@ export function resultVote(result) {
 export function projectCompletedAssignmentVote(document, assignment) {
   if (assignment.role === 'architecture') {
     document.blocks.verification.votes.architecture = {
+      assignment: assignment.id,
       covered: true,
-      ...resultVote(assignment.result),
+      ...receiptVote(assignment.receipt),
     };
   }
   if (assignment.role === 'development') {
@@ -113,7 +114,7 @@ export function projectCompletedAssignmentVote(document, assignment) {
       .filter((entry) => entry.assignment !== assignment.id);
     document.blocks.verification.votes.development.push({
       assignment: assignment.id,
-      ...resultVote(assignment.result),
+      ...receiptVote(assignment.receipt),
     });
   }
 }
@@ -132,6 +133,41 @@ function roleMatchesDimension(role, dimension) {
 }
 
 /**
+ * Classifies which verification dimensions one completed Development invalidates.
+ * Verification-origin dependencies establish the minimum invalidation because a
+ * bounded finding fix belongs to the role that requested it. Explicit true votes
+ * may widen that minimum for shared-interface or new-surface changes. Development
+ * without either an origin or a true vote remains ambiguous.
+ * @param {object} document - Work Item containing the Assignment graph.
+ * @param {object} development - Completed Development Assignment.
+ * @returns {Set<'test'|'review'>|null} Invalidated dimensions, or null when unclassified.
+ */
+function invalidatedDimensions(document, development) {
+  const assignments = new Map(document.blocks.assignments.map((assignment) => [assignment.id, assignment]));
+  const dimensions = new Set();
+  const visited = new Set();
+  /**
+   * Visits one persisted Assignment dependency.
+   * @param {string} id - Dependency identity.
+   * @returns {void} Returns after traversing its origins.
+   */
+  const visit = (id) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const assignment = assignments.get(id);
+    if (!assignment) return;
+    if (['test', 'retest'].includes(assignment.role)) dimensions.add('test');
+    if (['review', 'rereview'].includes(assignment.role)) dimensions.add('review');
+    for (const dependency of assignment.dependsOn ?? []) visit(dependency);
+  };
+  for (const dependency of development.dependsOn ?? []) visit(dependency);
+  for (const dimension of ['test', 'review']) {
+    if (development.receipt?.votes?.[dimension]?.requires === true) dimensions.add(dimension);
+  }
+  return dimensions.size ? dimensions : null;
+}
+
+/**
  * Determines whether the latest completed verification Assignment contains only passing checks.
  *
  * @param {object} document - Work Item containing Assignment history.
@@ -139,15 +175,27 @@ function roleMatchesDimension(role, dimension) {
  * @returns {boolean} `true` when the latest applicable result is complete and fully passing.
  */
 export function hasCompletedEvidence(document, dimension) {
-  const latest = document.blocks.assignments
+  const evidence = document.blocks.assignments
     .filter((assignment) => roleMatchesDimension(assignment.role, dimension)
       && assignment.status === 'completed'
-      && assignment.result?.status === 'completed')
-    .at(-1);
-  const checks = latest?.result?.checks;
-  return Array.isArray(checks)
-    && checks.length > 0
-    && checks.every((check) => check.result === 'passed');
+      && assignment.receipt?.status === 'completed')
+    .sort((left, right) => left.receipt.completed_order - right.receipt.completed_order);
+  const latest = evidence.at(-1);
+  if (latest?.receipt?.passed !== true) return false;
+  const relevantDevelopment = document.blocks.assignments
+    .filter((assignment) => assignment.role === 'development'
+      && assignment.status === 'completed'
+      && assignment.receipt?.status === 'completed')
+    .filter((assignment) => {
+      const classified = invalidatedDimensions(document, assignment);
+      return classified === null || classified.has(dimension);
+    });
+  if (!relevantDevelopment.length) return true;
+  const latestInvalidation = Math.max(...relevantDevelopment.map((assignment) => assignment.receipt.completed_order));
+  if (latest.receipt.completed_order <= latestInvalidation) return false;
+  const rerunRequired = evidence.some((assignment) => assignment.receipt.completed_order < latestInvalidation);
+  const rerunRole = dimension === 'test' ? 'retest' : 'rereview';
+  return !rerunRequired || latest.role === rerunRole;
 }
 
 /**
@@ -231,7 +279,6 @@ export function completionIssues(document) {
     ...document.blocks.todo.flatMap((item) => item.blockers ?? []),
     ...document.blocks.assignments.flatMap((item) => [
       ...(item.blockers ?? []),
-      ...(item.result?.blockers ?? []),
     ]),
   ];
   if (blockers.length) {
@@ -262,15 +309,14 @@ export function completionIssues(document) {
   const development = document.blocks.assignments
     .filter((assignment) => assignment.role === 'development');
   const codeWork = development.some(
-    (assignment) => assignment.write.length > 0 || (assignment.result?.files?.length ?? 0) > 0,
+    (assignment) => assignment.write.length > 0 || (assignment.receipt?.changed_surface?.length ?? 0) > 0,
   );
   if (!codeWork) return issues;
 
   const missingDevelopmentEvidence = development.filter((assignment) => assignment.write.length > 0
     && !(assignment.status === 'completed'
-      && assignment.result?.status === 'completed'
-      && assignment.result.summary.length > 0
-      && assignment.result.files.length > 0));
+      && assignment.receipt?.status === 'completed'
+      && assignment.receipt.changed_surface.length > 0));
   for (const assignment of missingDevelopmentEvidence) {
     issues.push({
       code: 'MISSING_DEVELOPMENT_EVIDENCE',

@@ -17,7 +17,6 @@ profiles:
       - objective-and-done-conditions
       - confirmed-decisions
       - exact-project-fact-pointers
-      - exact-material-pointers
       - allowed-read-and-write-scope
       - capability-availability
     returns: &concise-envelope
@@ -38,7 +37,7 @@ profiles:
     skill:
       name: verify-work-item
       path: .agents/skills/verify-work-item/SKILL.md
-    write_scope: assigned-long-evidence-materials-test-only
+    write_scope: read-only-except-disposable-command-artifacts
     capabilities:
       required: [workspace-read, shell]
       optional: [browser]
@@ -49,7 +48,6 @@ profiles:
       - changed-surface
       - exact-project-fact-pointers
       - available-verification-methods
-      - optional-assigned-long-evidence-path
       - capability-availability
     returns: *concise-envelope
 
@@ -59,7 +57,7 @@ profiles:
     skill:
       name: review-work-item
       path: .agents/skills/review-work-item/SKILL.md
-    write_scope: assigned-long-evidence-materials-review-only
+    write_scope: read-only
     capabilities:
       required: [workspace-read, code-search]
       optional: [diff, security-analysis]
@@ -70,7 +68,6 @@ profiles:
       - changed-surface
       - exact-project-fact-pointers
       - concise-verification-summary
-      - optional-assigned-long-evidence-path
       - capability-availability
     returns: *concise-envelope
 
@@ -80,7 +77,7 @@ profiles:
     skill:
       name: architect-work-item
       path: .agents/skills/architect-work-item/SKILL.md
-    write_scope: assigned-materials-architecture-only
+    write_scope: read-only
     capabilities:
       required: [workspace-read]
       optional: [web-search, external-docs, diagramming]
@@ -90,7 +87,5 @@ profiles:
       - objective-and-done-conditions
       - confirmed-constraints-and-decisions
       - exact-project-fact-pointers
-      - exact-material-pointers
-      - assigned-material-write-paths
       - capability-availability
     returns: *concise-envelope

@@ -216,7 +216,7 @@ async function installedSkillNames(skillsRoot) {
 }
 
 /**
- * Executes installed templates and the public workflow CLI in fresh runtime state.
+ * Executes the installed public workflow CLI and verifies its plain document/state layout.
  *
  * @param {string} targetRoot - Target repository root.
  * @param {string} skillsRoot - Installed project-local Skill root.
@@ -228,34 +228,6 @@ async function assertInstalledWorkflowRuntime(targetRoot, skillsRoot) {
     "orchestrate-engineering-team/scripts/workflow.mjs",
   );
   installedRuntimeImportSerial += 1;
-  const now = new Date("2026-07-28T01:00:00.000Z");
-  const documentUrl = pathToFileURL(path.join(
-    skillsRoot,
-    "orchestrate-engineering-team/scripts/workflow-document.mjs",
-  ));
-  documentUrl.searchParams.set(
-    "installed-template-validation",
-    String(installedRuntimeImportSerial),
-  );
-  const installedDocument = await import(documentUrl.href);
-  const workspace = installedDocument.newWorkspaceDocument(now);
-  installedDocument.newWorkDocument({
-    id: "installed-template-work",
-    name: "Installed template work",
-    summary: "Executes the installed work template.",
-    keywords: ["installed", "template", "runtime"],
-    type: "delivery",
-    goal: "Validate the installed work template.",
-    successCriteria: ["The installed work template renders."],
-  }, "../../../index.md", now);
-  assert.deepEqual(
-    installedDocument.decodeDocument(
-      installedDocument.encodeDocument(workspace),
-      "installed-workspace-index.md",
-    ),
-    workspace,
-  );
-
   const runtimeRoot = path.join(
     targetRoot,
     ".installed-workflow-runtime",
@@ -275,7 +247,7 @@ async function assertInstalledWorkflowRuntime(targetRoot, skillsRoot) {
   };
   assert.deepEqual(
     runInstalledCli(["init", "--root", runtimeRoot]),
-    { ok: true, workspace: ".agent-work/index.md" },
+    { ok: true, workspace: ".agent-work/open" },
   );
   runInstalledCli([
     "create",
@@ -300,6 +272,15 @@ async function assertInstalledWorkflowRuntime(targetRoot, skillsRoot) {
     runInstalledCli(["validate", "--root", runtimeRoot]),
     { valid: true, checked: 1, errors: [] },
   );
+  const workRoot = path.join(
+    runtimeRoot,
+    ".agent-work/open/installed-runtime-work",
+  );
+  const markdown = await readFile(path.join(workRoot, "work.md"), "utf8");
+  assert.match(markdown, /^# Installed runtime work/m);
+  assert.doesNotMatch(markdown, /^---\s*$/m);
+  assert.doesNotMatch(markdown, /```(?:json|ya?ml)?/i);
+  JSON.parse(await readFile(path.join(workRoot, "state.json"), "utf8"));
 }
 
 /**
@@ -332,18 +313,6 @@ export async function assertInstalledSkillSuite(targetRoot) {
     stat(
       path.join(
         skillsRoot,
-        "orchestrate-engineering-team/assets/work-item-index.md",
-      ),
-    ),
-    stat(
-      path.join(
-        skillsRoot,
-        "orchestrate-engineering-team/assets/workspace-index.md",
-      ),
-    ),
-    stat(
-      path.join(
-        skillsRoot,
         "orchestrate-engineering-team/references/agent-profiles.yaml",
       ),
     ),
@@ -354,6 +323,17 @@ export async function assertInstalledSkillSuite(targetRoot) {
       ),
     ),
   ]);
+  await Promise.all(
+    ["work-item-index.md", "workspace-index.md"].map((name) =>
+      assert.rejects(
+        stat(path.join(
+          skillsRoot,
+          "orchestrate-engineering-team/assets",
+          name,
+        )),
+      ),
+    ),
+  );
   await assertBundledWorkflowImportClosure(
     path.join(skillsRoot, "orchestrate-engineering-team/scripts"),
   );

@@ -22,8 +22,6 @@ const EXPECTED_SKILLS = Object.freeze([
 ]);
 const EXPECTED_MAIN_RESOURCES = Object.freeze([
   "assets/role-task-packet.md",
-  "assets/work-item-index.md",
-  "assets/workspace-index.md",
   "references/agent-profiles.yaml",
   "references/state-and-voting.md",
 ]);
@@ -38,10 +36,10 @@ const EXPECTED_WORKFLOW_EXPORTS = Object.freeze([
   "decisionCommand",
   "findCommand",
   "handoffCommand",
+  "historyCommand",
   "initWorkspace",
   "listCommand",
   "loadInput",
-  "materialCommand",
   "mutateWork",
   "packetCommand",
   "parseCli",
@@ -121,7 +119,10 @@ async function assertCopiedWorkflowRuns(mainSkillRoot, temporaryRoot) {
   );
   const runtimeRoot = path.join(temporaryRoot, "workflow-runtime-smoke");
   const now = new Date("2026-07-28T00:00:00.000Z");
-  await workflow.runCli(["init", "--root", runtimeRoot], { now });
+  assert.deepEqual(
+    await workflow.runCli(["init", "--root", runtimeRoot], { now }),
+    { ok: true, workspace: ".agent-work/open" },
+  );
   await workflow.runCli([
     "create",
     "--root",
@@ -145,6 +146,12 @@ async function assertCopiedWorkflowRuns(mainSkillRoot, temporaryRoot) {
     await workflow.runCli(["validate", "--root", runtimeRoot], { now }),
     { valid: true, checked: 1, errors: [] },
   );
+  const workRoot = path.join(runtimeRoot, ".agent-work/open/copied-runtime");
+  const markdown = await readFile(path.join(workRoot, "work.md"), "utf8");
+  assert.match(markdown, /^# Copied runtime/m);
+  assert.doesNotMatch(markdown, /^---\s*$/m);
+  assert.doesNotMatch(markdown, /```(?:json|ya?ml)?/i);
+  await readJson(path.join(workRoot, "state.json"));
 }
 
 /**
@@ -221,6 +228,11 @@ export async function checkCopiedPackage(sourceRoot = PROJECT_ROOT) {
     const mainSkillRoot = path.join(skillsRoot, "orchestrate-engineering-team");
     await Promise.all(
       EXPECTED_MAIN_RESOURCES.map((resource) => access(path.join(mainSkillRoot, resource))),
+    );
+    await Promise.all(
+      ["assets/work-item-index.md", "assets/workspace-index.md"].map((resource) =>
+        assert.rejects(access(path.join(mainSkillRoot, resource))),
+      ),
     );
     await assertBundledWorkflowImportClosure(path.join(mainSkillRoot, "scripts"));
     await assertCopiedWorkflowRuns(mainSkillRoot, temporaryRoot);

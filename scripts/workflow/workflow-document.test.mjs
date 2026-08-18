@@ -1,294 +1,232 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-
+import { applyAssignment, applyDecision, applyResult } from '../../.agents/skills/orchestrate-engineering-team/scripts/work-model.mjs';
 import {
-  decodeDocument,
-  encodeDocument,
+  decorateWork,
   newWorkDocument,
-  newWorkspaceDocument,
+  syncWork,
+  validateDocument,
+  validateState,
 } from '../../.agents/skills/orchestrate-engineering-team/scripts/workflow-document.mjs';
 
-const now = new Date('2026-07-28T01:00:00.000Z');
-const assets = new URL(
-  '../../.agents/skills/orchestrate-engineering-team/assets/',
-  import.meta.url,
-);
-const SENTINEL_NAMESPACE = '⟪ORCHESTRATE:';
-const SENTINEL_SUFFIX = ':6D71B11E⟫';
-const SENTINEL_PATTERN = /⟪ORCHESTRATE:[A-Z0-9_]+:6D71B11E⟫/g;
-
-function sentinel(name) {
-  return `${SENTINEL_NAMESPACE}${name}${SENTINEL_SUFFIX}`;
-}
-
-function instantiateFixture(text, replacements) {
-  const sourceTokens = [...text.matchAll(SENTINEL_PATTERN)].map((match) => match[0]);
-  const expectedTokens = replacements.map(([name]) => sentinel(name));
-  assert.equal(sourceTokens.length, new Set(sourceTokens).size);
-  assert.deepEqual(new Set(sourceTokens), new Set(expectedTokens));
-
-  let substituted = text;
-  for (const [name, value] of replacements) {
-    const token = sentinel(name);
-    assert.equal(substituted.split(token).length - 1, 1, `expected one ${token}`);
-    substituted = substituted.replace(token, () => value);
-  }
-  assert.equal(substituted.includes(SENTINEL_NAMESPACE), false);
-  return substituted;
-}
-
-test('workflow constructors consume bundled templates as exact canonical bytes', async () => {
-  const workspaceTemplate = await readFile(new URL('workspace-index.md', assets), 'utf8');
-  const workspaceBytes = instantiateFixture(workspaceTemplate, [
-    ['WORKSPACE_UPDATED_AT_JSON', JSON.stringify(now.toISOString())],
-  ]);
-  const workspaceFromTemplate = decodeDocument(workspaceBytes, 'assets/workspace-index.md');
-  const constructedWorkspace = newWorkspaceDocument(now);
-  assert.equal(encodeDocument(constructedWorkspace), workspaceBytes);
-  assert.deepEqual(constructedWorkspace, workspaceFromTemplate);
-
-  const workTemplate = await readFile(new URL('work-item-index.md', assets), 'utf8');
-  const workBytes = instantiateFixture(workTemplate, [
-    ['WORK_ID_JSON', JSON.stringify('template-work')],
-    ['WORK_NAME_JSON', JSON.stringify('Template work')],
-    ['WORK_SUMMARY_JSON', JSON.stringify('Exercises the bundled work template.')],
-    ['WORK_KEYWORDS_JSON', JSON.stringify(['workflow', 'template', 'canonical'])],
-    ['WORK_TYPE_JSON', JSON.stringify('delivery')],
-    ['WORK_STAGE_JSON', JSON.stringify('align')],
-    ['WORK_PARENT_JSON', JSON.stringify('../../../index.md')],
-    ['WORK_UPDATED_AT_JSON', JSON.stringify(now.toISOString())],
-    ['WORK_TITLE_TEXT', 'Template work'],
-    ['WORK_GOAL_JSON', JSON.stringify('Validate the bundled work template.')],
-    ['WORK_SUCCESS_CRITERIA_JSON', JSON.stringify(['The bundled work template decodes.'], null, 2)],
-  ]);
-  const workFromTemplate = decodeDocument(workBytes, 'assets/work-item-index.md');
-  const constructed = newWorkDocument({
-    id: 'template-work',
-    name: 'Template work',
-    summary: 'Exercises the bundled work template.',
-    keywords: ['workflow', 'template', 'canonical'],
-    type: 'delivery',
-    goal: 'Validate the bundled work template.',
-    successCriteria: ['The bundled work template decodes.'],
-  }, '../../../index.md', now);
-
-  assert.equal(encodeDocument(constructed), workBytes);
-  assert.deepEqual(constructed, workFromTemplate);
+test('document interface separates readable Markdown from coordination state', () => {
+  const document = newWorkDocument({ id: 'plain-document', name: 'Plain document', goal: 'Stay readable.', successCriteria: ['Readable.'] }, null, new Date(0));
+  syncWork(document);
+  assert.doesNotMatch(document.markdown, /^---$|```json|<!--\s*workflow:/m);
+  assert.equal(JSON.stringify(document.state).includes('Stay readable.'), false);
+  assert.equal(validateDocument(document), document);
 });
 
-test('workflow template replacements preserve special characters and variable arrays', async () => {
-  const template = await readFile(new URL('work-item-index.md', assets), 'utf8');
-  const input = {
-    id: 'special-template-work',
-    name: 'Quoted "work" \\ # [draft] *bold*\ncontinued',
-    summary: 'Keep "quotes", \\slashes, `code`, # headings, and [links](./x).',
-    keywords: ['one', 'two"', 'three\\', '#four', '[five]', '`six`', '*seven*', 'eight!'],
-    type: 'exploration',
-    stage: 'develop',
-    goal: 'Prove "JSON" replacement \\ safety.\n\n# This remains goal text.',
-    successCriteria: [
-      'Quotes such as "this" survive.',
-      'Backslashes such as C:\\temp\\file survive.',
-      'Markdown such as **bold**, [link](./x), and `code` survives.',
-    ],
-  };
-  const parent = '../../a folder/index.md';
-  const expectedBytes = instantiateFixture(template, [
-    ['WORK_ID_JSON', JSON.stringify(input.id)],
-    ['WORK_NAME_JSON', JSON.stringify(input.name)],
-    ['WORK_SUMMARY_JSON', JSON.stringify(input.summary)],
-    ['WORK_KEYWORDS_JSON', JSON.stringify(input.keywords)],
-    ['WORK_TYPE_JSON', JSON.stringify(input.type)],
-    ['WORK_STAGE_JSON', JSON.stringify(input.stage)],
-    ['WORK_PARENT_JSON', JSON.stringify(parent)],
-    ['WORK_UPDATED_AT_JSON', JSON.stringify(now.toISOString())],
-    ['WORK_TITLE_TEXT', input.name],
-    ['WORK_GOAL_JSON', JSON.stringify(input.goal)],
-    ['WORK_SUCCESS_CRITERIA_JSON', JSON.stringify(input.successCriteria, null, 2)],
-  ]);
-  const constructed = newWorkDocument(input, parent, now);
-  const expectedDocument = decodeDocument(expectedBytes, 'assets/work-item-index.md');
-
-  assert.equal(encodeDocument(constructed), expectedBytes);
-  assert.deepEqual(constructed, expectedDocument);
-});
-
-test('workflow template replacements preserve JavaScript replacement sequences exactly', () => {
-  const replacementSequences = "$& $` $' $$";
-  const input = {
-    id: 'literal-replacement-work',
-    name: `Name ${replacementSequences}`,
-    summary: `Summary ${replacementSequences}`,
-    keywords: ['literal', 'replacement', 'round-trip'],
-    type: 'delivery',
-    goal: `Goal ${replacementSequences}`,
-    successCriteria: [
-      `Criterion ${replacementSequences}`,
-      `Second criterion keeps ${replacementSequences} too`,
-    ],
-  };
-
-  const constructed = newWorkDocument(input, '../../../index.md', now);
-  const bytes = encodeDocument(constructed);
-  const decoded = decodeDocument(bytes, 'literal-replacement-work.md');
-
-  assert.equal(decoded.frontmatter.name, input.name);
-  assert.equal(decoded.frontmatter.summary, input.summary);
-  assert.equal(decoded.blocks.goal, input.goal);
-  assert.deepEqual(decoded.blocks.success_criteria, input.successCriteria);
-  assert.equal(encodeDocument(decoded), bytes);
-});
-
-test('workflow template rejects exact reserved sentinel collisions without rejecting near matches', () => {
-  const baseInput = {
-    id: 'sentinel-collision-work',
-    name: 'Sentinel collision work',
-    summary: 'Rejects reserved template sentinel collisions.',
-    keywords: ['sentinel', 'collision', 'template'],
-    type: 'delivery',
-    goal: 'Reject reserved sentinel collisions.',
-    successCriteria: ['Collision is reported before rendering.'],
-  };
-  const reserved = sentinel('WORK_GOAL_JSON');
-  const collisionCases = [
-    ['name', { name: `Name ${reserved}` }],
-    ['summary', { summary: `Summary ${reserved}` }],
-    ['goal', { goal: `Goal ${reserved}` }],
-    ['success criteria', { successCriteria: [`Criterion ${reserved}`] }],
+test('document validation rejects ambiguous duplicate semantic facts', () => {
+  const base = newWorkDocument({ id: 'unambiguous-document', name: 'Unambiguous document', goal: 'Keep one fact.', successCriteria: ['Facts are unique.'] }, null, new Date(0));
+  const mutations = [
+    (markdown) => `${markdown}\n# Second title\n`,
+    (markdown) => `${markdown}\n  #   Second title ###   \n`,
+    (markdown) => markdown.replace('Status: active', 'Status: active\n\nStatus: active'),
+    (markdown) => `${markdown}\n## Outcome\n\nConflicting outcome.\n`,
+    (markdown) => `${markdown}\n ##   oUtCoMe ###   \n\nConflicting normalized outcome.\n`,
+    (markdown) => `${markdown}\n## Acceptance\n\n- [ ] Conflicting acceptance.\n`,
+    (markdown) => `${markdown}\n ##\tACCEPTANCE\t##\n\n- [ ] Conflicting tabbed acceptance.\n`,
   ];
+  for (const mutate of mutations) {
+    const document = decorateWork({ kind: 'work', markdown: mutate(base.markdown), state: structuredClone(base.state) });
+    assert.throws(() => validateDocument(document), { code: 'INVALID_DOCUMENT' });
+  }
+  for (const heading of ['Out*come', 'Out_come', '`Outcome`', '**Outcome**']) {
+    const distinct = decorateWork({ kind: 'work', markdown: `${base.markdown}\n## ${heading}\n\nOrdinary extension.\n`, state: structuredClone(base.state) });
+    assert.equal(validateDocument(distinct), distinct);
+  }
+});
 
-  for (const [field, override] of collisionCases) {
+test('semantic heading scanner ignores code and Setext while accepting supported ATX variants', () => {
+  const base = newWorkDocument({ id: 'structural-headings', name: 'Structural headings', goal: 'Parse blocks.', successCriteria: ['Blocks parse.'] }, null, new Date(0));
+  const examples = decorateWork({
+    kind: 'work',
+    markdown: `${base.markdown}\n\`\`\`markdown\n# Example title\n## Outcome\n\`\`\`\n\n    # Indented title\n    ## Acceptance\n\nOutcome\n-------\n`,
+    state: structuredClone(base.state),
+  });
+  assert.equal(validateDocument(examples), examples);
+
+  const variant = decorateWork({
+    kind: 'work',
+    markdown: base.markdown
+      .replace('## Outcome', ' ## oUtCoMe ###')
+      .replace('## Acceptance', '  ##\tAcceptance\t##'),
+    state: structuredClone(base.state),
+  });
+  assert.equal(validateDocument(variant), variant);
+  assert.equal(variant.blocks.goal, 'Parse blocks.');
+  assert.deepEqual(variant.blocks.success_criteria, ['Blocks parse.']);
+
+  const statusesInCode = decorateWork({
+    kind: 'work',
+    markdown: `${base.markdown}\n\`\`\`text\nStatus: blocked\n## Outcome\n\`\`\`\n\n    Status: blocked\n`,
+    state: structuredClone(base.state),
+  });
+  assert.equal(validateDocument(statusesInCode), statusesInCode);
+
+  const invalidFence = decorateWork({
+    kind: 'work',
+    markdown: `${base.markdown}\n\`\`\` invalid\`info\n## Outcome\n\nConflicting real heading.\n`,
+    state: structuredClone(base.state),
+  });
+  assert.throws(() => validateDocument(invalidFence), { code: 'INVALID_DOCUMENT' });
+});
+
+test('decision evidence survives Markdown rendering and reload without entering operational state', () => {
+  const document = newWorkDocument({ id: 'decision-evidence', name: 'Decision evidence', goal: 'Retain links.', successCriteria: ['Links reload.'] }, null, new Date(0));
+  applyDecision(document, 'add', {
+    id: 'retain-links',
+    summary: 'Keep [Markdown] *literal* $& and the \u2014 Evidence: delimiter.',
+    evidence: ['docs/decision record.md', 'https://example.test/evidence?id=7'],
+  });
+  syncWork(document);
+  assert.match(document.markdown, /\[Markdown\] \*literal\* \$& and the \u2014 Evidence: delimiter\.\n  - Evidence: \[docs\/decision record\.md\]\(docs\/decision%20record\.md\)/);
+  assert.equal(JSON.stringify(document.state).includes('decision record'), false);
+  const reloaded = decorateWork({ kind: 'work', markdown: document.markdown, state: structuredClone(document.state) });
+  assert.deepEqual(reloaded.blocks.confirmed_decisions, [{
+    id: 'retain-links',
+    summary: 'Keep [Markdown] *literal* $& and the \u2014 Evidence: delimiter.',
+    evidence: ['docs/decision record.md', 'https://example.test/evidence?id=7'],
+  }]);
+  for (const [id, lineBreak] of [
+    ['reject-cr', '\r'],
+    ['reject-lf', '\n'],
+    ['reject-line-separator', '\u2028'],
+    ['reject-paragraph-separator', '\u2029'],
+  ]) {
     assert.throws(
-      () => newWorkDocument({ ...baseInput, ...override }, '../../../index.md', now),
-      (error) => error.code === 'INVALID_TEMPLATE'
-        && error.message === 'assets/work-item-index.md: replacement collides with reserved template sentinel namespace',
-      field,
+      () => applyDecision(document, 'add', {
+        id, summary: `First line${lineBreak}  - Evidence: injected`, evidence: [],
+      }),
+      (error) => error.code === 'INVALID_INPUT' && error.message === 'decision summary must be a single line',
     );
   }
+  applyDecision(document, 'add', {
+    id: 'retain-special-single-line',
+    summary: 'Keep | [] () * _ # $& 🥷 on one line.',
+    evidence: [],
+  });
+  assert.match(document.markdown, /Keep \| \[\] \(\) \* _ # \$& 🥷 on one line\./);
+});
 
-  const nearSentinel = '⟪ORCHESTRATE-WORK_GOAL_JSON:6D71B11E⟫';
-  const nearInput = {
-    ...baseInput,
-    name: `Name ${nearSentinel}`,
-    summary: `Summary ${nearSentinel}`,
-    goal: `Goal ${nearSentinel}`,
-    successCriteria: [`Criterion ${nearSentinel}`],
+test('Architecture vote projection follows completion order instead of Assignment array order', () => {
+  const document = newWorkDocument({ id: 'ordered-architecture', name: 'Ordered architecture', goal: 'Order receipts.', successCriteria: ['Latest completion wins.'] }, null, new Date(0));
+  for (const [id, objective] of [
+    ['architecture-created-first', 'Complete second.'],
+    ['architecture-created-second', 'Complete first.'],
+  ]) {
+    applyAssignment(document, 'add', { id, role: 'architecture', objective });
+    applyAssignment(document, 'start', { id });
+  }
+  /** Completes one Architecture Assignment. @param {string} id Assignment ID. @param {boolean} requires Vote. @param {string} label Label. @returns {void} */
+  const complete = (id, requires, label) => {
+    applyResult(document, {
+      assignment: id,
+      result: {
+        status: 'completed', summary: [`${label} completed.`], artifacts: [], files: [],
+        checks: [{ command: `${label} check`, result: 'passed' }],
+        requires_test: requires, test_reason: `${label} test vote.`,
+        requires_review: requires, review_reason: `${label} review vote.`, blockers: [],
+      },
+    });
+    applyAssignment(document, 'complete', { id });
   };
-  const nearDocument = newWorkDocument(nearInput, '../../../index.md', now);
-  assert.equal(nearDocument.frontmatter.name, nearInput.name);
-  assert.equal(nearDocument.frontmatter.summary, nearInput.summary);
-  assert.equal(nearDocument.blocks.goal, nearInput.goal);
-  assert.deepEqual(nearDocument.blocks.success_criteria, nearInput.successCriteria);
+  complete('architecture-created-second', false, 'First completion');
+  complete('architecture-created-first', true, 'Latest completion');
+  syncWork(document);
+  assert.deepEqual(document.state.assignments.map((assignment) => assignment.receipt.completed_order), [2, 1]);
+  assert.equal(document.state.verification.votes.architecture.assignment, 'architecture-created-first');
+  validateState(document.state);
+
+  const reordered = JSON.parse(JSON.stringify(document.state));
+  reordered.assignments.reverse();
+  validateState(reordered);
+  reordered.verification.votes.architecture = {
+    assignment: 'architecture-created-second', covered: true,
+    ...reordered.assignments.find((assignment) => assignment.id === 'architecture-created-second').receipt.votes,
+  };
+  assert.throws(() => validateState(reordered), { code: 'INVALID_DOCUMENT' });
 });
 
-test('workflow document interface emits canonical root and work bytes', () => {
-  const root = newWorkspaceDocument(now);
-  const rootBytes = encodeDocument(root);
-  assert.match(rootBytes, /^---\nid: "workspace"\n/);
-  assert.ok(rootBytes.endsWith('\n'));
-  assert.equal(encodeDocument(decodeDocument(rootBytes, 'root.md')), rootBytes);
+test('state recovery validation rejects malformed ownership, assignment packets, todos, and gates', async (t) => {
+  const document = newWorkDocument({ id: 'strict-recovery', name: 'Strict recovery', goal: 'Fail closed.', successCriteria: ['Malformed state is rejected.'] }, null, new Date(0));
+  applyAssignment(document, 'add', {
+    id: 'strict-development', role: 'development', objective: 'Exercise recovery.',
+    successCriteria: ['Every packet field survives.'], read: ['README.md'], write: ['src/runtime.mjs'],
+    decisions: ['retain-links'], requiredCapabilities: ['workspace-read'], availableCapabilities: ['workspace-read'],
+    dependsOn: [], sharedInterfaceStable: true, touchesGlobal: false, integrator: '/root',
+  });
+  applyAssignment(document, 'add', {
+    id: 'strict-architecture', role: 'architecture', objective: 'Define recovery boundaries.',
+    successCriteria: ['Recovery boundaries are explicit.'], read: ['README.md'], write: [],
+    decisions: [], requiredCapabilities: ['workspace-read'], availableCapabilities: ['workspace-read'],
+    dependsOn: [], sharedInterfaceStable: true, touchesGlobal: false, integrator: '/root',
+  });
+  applyAssignment(document, 'start', { id: 'strict-architecture' });
+  applyResult(document, {
+    assignment: 'strict-architecture',
+    result: {
+      status: 'completed', summary: ['Architecture completed.'], artifacts: [], files: [],
+      checks: [{ command: 'architecture check', result: 'passed' }],
+      requires_test: true, test_reason: 'Recovery behavior needs testing.',
+      requires_review: true, review_reason: 'Recovery boundaries need review.', blockers: [],
+    },
+  });
+  applyAssignment(document, 'complete', { id: 'strict-architecture' });
+  syncWork(document);
+  validateState(document.state);
 
-  const work = newWorkDocument({
-    id: 'canonical-work',
-    name: 'Canonical work',
-    summary: 'Preserves the canonical workflow document.',
-    keywords: ['canonical', 'workflow', 'document'],
-    type: 'delivery',
-    goal: 'Preserve canonical bytes.',
-    successCriteria: ['Round trips exactly.'],
-  }, '../../../index.md', now);
-  const workBytes = encodeDocument(work);
-  assert.deepEqual(decodeDocument(workBytes, 'work.md'), work);
-  assert.equal(encodeDocument(decodeDocument(workBytes, 'work.md')), workBytes);
-});
+  const blockedAssignment = structuredClone(document.state);
+  blockedAssignment.assignments[0].status = 'blocked';
+  blockedAssignment.assignments[0].blockers = ['Retry after dependency recovery.'];
+  blockedAssignment.assignments[0].receipt = {
+    status: 'partial', changed_surface: [],
+    votes: {
+      test: { requires: true, reason: 'Retry needs testing.' },
+      review: { requires: true, reason: 'Retry needs review.' },
+    },
+  };
+  validateState(blockedAssignment);
+  blockedAssignment.assignments[0].status = 'in_progress';
+  blockedAssignment.assignments[0].blockers = [];
+  blockedAssignment.assignments[0].receipt = null;
+  validateState(blockedAssignment);
 
-test('workflow document interface keeps parse error code and message priority', () => {
-  assert.throws(
-    () => decodeDocument('# missing frontmatter\n', 'broken.md'),
-    (error) => error.code === 'INVALID_FRONTMATTER'
-      && error.message === 'broken.md: missing frontmatter',
-  );
+  const blockedTodo = structuredClone(document.state);
+  blockedTodo.status = 'blocked';
+  blockedTodo.todos[0].status = 'blocked';
+  blockedTodo.todos[0].blockers = ['Awaiting a user decision.'];
+  validateState(blockedTodo);
 
-  const text = encodeDocument(newWorkspaceDocument(now))
-    .replace('<!-- workflow:work_items:end -->', '<!-- workflow:unknown:end -->');
-  assert.throws(
-    () => decodeDocument(text, 'broken-root.md'),
-    (error) => error.code === 'INVALID_BLOCKS'
-      && error.message === 'broken-root.md: controlled block work_items must appear exactly once',
-  );
-});
-
-test('workflow document interface rejects malformed documents with stable first failures', () => {
-  const rootBytes = encodeDocument(newWorkspaceDocument(now));
-  const workBytes = encodeDocument(newWorkDocument({
-    id: 'malformed-work',
-    name: 'Malformed work',
-    summary: 'Exercises malformed document diagnostics.',
-    keywords: ['malformed', 'document', 'diagnostics'],
-    type: 'delivery',
-    goal: 'Preserve diagnostic priority.',
-    successCriteria: ['Diagnostics remain stable.'],
-  }, '../../../index.md', now));
   const cases = [
-    {
-      name: 'unterminated frontmatter',
-      text: rootBytes.replace('\n---\n\n#', '\n--\n\n#'),
-      code: 'INVALID_FRONTMATTER',
-      message: 'malformed.md: unterminated frontmatter',
-    },
-    {
-      name: 'duplicate frontmatter field precedes exact-key validation',
-      text: rootBytes.replace('id: "workspace"', 'id: "workspace"\nid: "workspace"'),
-      code: 'INVALID_FRONTMATTER',
-      message: 'malformed.md: duplicate frontmatter field id',
-    },
-    {
-      name: 'invalid block JSON precedes document shape validation',
-      text: rootBytes.replace('```json\n[]', '```json\n['),
-      code: 'INVALID_BLOCKS',
-      message: 'malformed.md: controlled block work_items contains invalid JSON',
-    },
-    {
-      name: 'missing marker precedes unknown-marker validation',
-      text: rootBytes.replace(
-        '<!-- workflow:work_items:end -->',
-        '<!-- workflow:unknown:end -->',
-      ),
-      code: 'INVALID_BLOCKS',
-      message: 'malformed.md: controlled block work_items must appear exactly once',
-    },
-    {
-      name: 'unexpected frontmatter field precedes keyword validation',
-      text: workBytes
-        .replace('id: "malformed-work"', 'unexpected: "field"\nid: "malformed-work"')
-        .replace('keywords: ["malformed","document","diagnostics"]', 'keywords: "bad"'),
-      code: 'INVALID_FRONTMATTER',
-      message: 'malformed.md: frontmatter fields must exactly match the workflow schema',
-    },
-    {
-      name: 'owner pairing precedes work block policy',
-      text: workBytes
-        .replace('owner: ""', 'owner: "main-a"')
-        .replace('"status": "in_progress"', '"status": "unknown"'),
-      code: 'INVALID_LEASE',
-      message: 'malformed.md: owner and lease_until must both be set or empty',
-    },
-    {
-      name: 'todo policy precedes assignment policy',
-      text: workBytes
-        .replace('"status": "in_progress"', '"status": "unknown"')
-        .replace('"assignments": []', '"assignments": [{"role":"unknown","status":"unknown"}]'),
-      code: 'INVALID_TODO',
-      message: 'malformed.md: active work must have exactly one in-progress todo',
-    },
+    ['owner without lease', (state) => { state.owner = 'main'; }],
+    ['lease without owner', (state) => { state.lease_until = '2026-08-12T02:00:00.000Z'; }],
+    ['invalid lease duration', (state) => { state.lease_minutes = 0; }],
+    ['malformed todo blockers', (state) => { state.todos[0].blockers = ['unresolved']; }],
+    ['missing todo field', (state) => { delete state.todos[0].assignment; }],
+    ['malformed capabilities', (state) => { delete state.assignments[0].capabilities.unavailable; }],
+    ['malformed write scope', (state) => { state.assignments[0].write = ['../outside']; }],
+    ['missing packet objective', (state) => { delete state.assignments[0].objective; }],
+    ['missing packet success criteria', (state) => { delete state.assignments[0].successCriteria; }],
+    ['missing packet read scope', (state) => { delete state.assignments[0].read; }],
+    ['missing packet decisions', (state) => { delete state.assignments[0].decisions; }],
+    ['missing dependency field', (state) => { delete state.assignments[0].dependsOn; }],
+    ['missing parallel safety field', (state) => { delete state.assignments[0].sharedInterfaceStable; }],
+    ['malformed verification votes', (state) => { state.verification.votes.development = {}; }],
+    ['missing architecture vote', (state) => { state.verification.votes.architecture = null; }],
+    ['disagreeing architecture vote', (state) => {
+      state.verification.votes.architecture.test = { requires: false, reason: 'Fabricated disagreement.' };
+    }],
+    ['misattributed architecture vote', (state) => { state.verification.votes.architecture.assignment = 'strict-development'; }],
+    ['fabricated architecture vote', (state) => { state.assignments = state.assignments.filter((assignment) => assignment.role !== 'architecture'); }],
+    ['malformed verification decision', (state) => { state.verification.decisions.test = { execute: true }; }],
   ];
-
-  for (const fixture of cases) {
-    assert.throws(
-      () => decodeDocument(fixture.text, 'malformed.md'),
-      (error) => error.code === fixture.code && error.message === fixture.message,
-      fixture.name,
-    );
+  for (const [name, mutate] of cases) {
+    await t.test(name, () => {
+      const state = structuredClone(document.state);
+      mutate(state);
+      assert.throws(() => validateState(state), { code: 'INVALID_DOCUMENT' });
+    });
   }
 });

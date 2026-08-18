@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   isAlias,
@@ -17,17 +17,17 @@ const ROLE_PROFILES = Object.freeze({
   test: {
     name: "Test Agent",
     skill: "verify-work-item",
-    writeScope: "assigned-long-evidence-materials-test-only",
+    writeScope: "read-only-except-disposable-command-artifacts",
   },
   review: {
     name: "Review Agent",
     skill: "review-work-item",
-    writeScope: "assigned-long-evidence-materials-review-only",
+    writeScope: "read-only",
   },
   architecture: {
     name: "Architecture Agent",
     skill: "architect-work-item",
-    writeScope: "assigned-materials-architecture-only",
+    writeScope: "read-only",
   },
 });
 
@@ -64,11 +64,13 @@ const MAIN_RESOURCE_PATHS = Object.freeze([
   ".agents/skills/orchestrate-engineering-team/scripts/workflow-store.mjs",
   ".agents/skills/orchestrate-engineering-team/scripts/workflow.mjs",
   ".agents/skills/orchestrate-engineering-team/scripts/value-policy.mjs",
-  ".agents/skills/orchestrate-engineering-team/assets/work-item-index.md",
-  ".agents/skills/orchestrate-engineering-team/assets/workspace-index.md",
   TASK_PACKET_PATH,
   ".agents/skills/orchestrate-engineering-team/references/state-and-voting.md",
   REGISTRY_PATH,
+]);
+const OBSOLETE_RESOURCE_PATHS = Object.freeze([
+  ".agents/skills/orchestrate-engineering-team/assets/work-item-index.md",
+  ".agents/skills/orchestrate-engineering-team/assets/workspace-index.md",
 ]);
 const SKILL_FRONTMATTER_FIELDS = Object.freeze([
   "name",
@@ -1088,7 +1090,7 @@ function validateMainOnlySemantics(diagnostics, file, source) {
     );
   }
   if (
-    !/(?:only|sole|unique|single)[^\n]{0,100}(?:Main|owner)[^\n]{0,100}(?:index\.md|task state)|(?:Main|owner)[^\n]{0,100}(?:only|sole|unique|single)[^\n]{0,100}(?:index\.md|task state)/i.test(
+    !/(?:only|sole|unique|single)[^\n]{0,120}(?:Main|owner)[^\n]{0,120}(?:work\.md|state\.json|task state)|(?:Main|owner)[^\n]{0,120}(?:only|sole|unique|single)[^\n]{0,120}(?:work\.md|state\.json|task state)/i.test(
       source,
     )
   ) {
@@ -1097,9 +1099,18 @@ function validateMainOnlySemantics(diagnostics, file, source) {
         file,
         location(1, 1),
         "MAIN_ONLY_STATE",
-        "must state that the owner Main is the only writer of its Work Item index/task state",
+        "must state that the owner Main is the only writer of its Work Item document/task state",
       ),
     );
+  }
+  for (const [pattern, code, reason] of [
+    [/one plain-Markdown `work\.md`|exactly one plain-Markdown `work\.md`/i, "WORK_DOCUMENT", "must define one plain-Markdown work.md per Main-owned Work Item"],
+    [/sibling[^\n]{0,100}`state\.json`|`state\.json`[^\n]{0,100}sibling/i, "SEPARATE_STATE", "must define sibling state.json as separate operational coordination"],
+    [/archive[^\n]{0,160}(?:exclude|default|normal)|(?:exclude|default|normal)[^\n]{0,160}archive/i, "ARCHIVE_CONTEXT", "must exclude retained archives from normal Agent context"],
+  ]) {
+    if (!pattern.test(source)) {
+      diagnostics.push(makeDiagnostic(file, location(1, 1), code, reason));
+    }
   }
 }
 
@@ -1113,7 +1124,7 @@ function validateMainOnlySemantics(diagnostics, file, source) {
  */
 function validateRoleStateBoundary(diagnostics, file, source) {
   if (
-    !/(?:do not|must not|never|forbidden|prohibited)[^\n]{0,120}(?:index\.md|task (?:index|state))|(?:index\.md|task (?:index|state))[^\n]{0,120}(?:do not|must not|never|forbidden|prohibited)/i.test(
+    !/(?:do not|must not|never|forbidden|prohibited)[^\n]{0,160}(?:work\.md|state\.json|task state)|(?:work\.md|state\.json|task state)[^\n]{0,160}(?:do not|must not|never|forbidden|prohibited)/i.test(
       source,
     )
   ) {
@@ -1122,7 +1133,7 @@ function validateRoleStateBoundary(diagnostics, file, source) {
         file,
         location(1, 1),
         "ROLE_STATE_WRITE",
-        "must explicitly prohibit the role from modifying Work Item indexes/task state",
+        "must explicitly prohibit the role from modifying Work Item documents/task state",
       ),
     );
   }
@@ -1148,6 +1159,16 @@ function validateTaskPacketSemantics(diagnostics, source) {
     );
   }
   validateRoleStateBoundary(diagnostics, file, source);
+  if (!/(?:transient|do not persist|must not persist)[^\n]{0,160}(?:return|result|message)|(?:return|result|message)[^\n]{0,160}(?:transient|do not persist|must not persist)/i.test(source)) {
+    diagnostics.push(
+      makeDiagnostic(
+        file,
+        location(1, 1),
+        "TRANSIENT_RESULT",
+        "must state that the role return is transient and must not be persisted as task-local history",
+      ),
+    );
+  }
 }
 
 /**
@@ -1207,6 +1228,21 @@ export function formatDiagnostic(diagnostic) {
  */
 export async function checkAgentProfiles(root) {
   const diagnostics = [];
+  for (const file of OBSOLETE_RESOURCE_PATHS) {
+    try {
+      await access(path.join(root, file));
+      diagnostics.push(
+        makeDiagnostic(
+          file,
+          location(1, 1),
+          "OBSOLETE_RESOURCE",
+          "obsolete JSON-in-Markdown template must not be packaged",
+        ),
+      );
+    } catch (error) {
+      if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") throw error;
+    }
+  }
   const files = [...MAIN_RESOURCE_PATHS];
   for (const skillName of SKILL_NAMES) {
     files.push(`.agents/skills/${skillName}/SKILL.md`);

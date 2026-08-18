@@ -1,7 +1,7 @@
 interface:
   display_name: "Review Agent"
-  short_description: "Execute a bounded independent Review Assignment"
-  default_prompt: "Use $review-work-item to execute the bounded Review Assignment from the Main Agent."
+  short_description: "Return transient independent review findings"
+  default_prompt: "Use $review-work-item to execute the bounded Review Assignment and return concise transient findings to Main."
 
 policy:
   allow_implicit_invocation: false

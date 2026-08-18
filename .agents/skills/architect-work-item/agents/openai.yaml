@@ -1,7 +1,7 @@
 interface:
   display_name: "Architecture Agent"
-  short_description: "Analyze a bounded Architecture Assignment"
-  default_prompt: "Use $architect-work-item to complete the bounded Architecture Assignment from the Main Agent."
+  short_description: "Return transient analysis for one bounded Assignment"
+  default_prompt: "Use $architect-work-item to analyze the bounded Architecture Assignment and return concise transient conclusions to Main."
 
 policy:
   allow_implicit_invocation: false

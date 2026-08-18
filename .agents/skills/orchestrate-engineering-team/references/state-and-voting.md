@@ -1,76 +1,81 @@
-# Work Item state and verification voting
+# Work Item documents, coordination state, and verification voting
 
-Use this reference when Main creates, resumes, transitions, verifies, or closes a Work Item. `workflow.mjs` is the deterministic authority for valid state mutations.
+Use this reference when Main creates, resumes, transitions, verifies, completes, archives, or explicitly inspects history. `workflow.mjs` is the deterministic authority for machine-state mutations and context-safe discovery.
 
 ## Contents
 
 - [Object and ownership rules](#object-and-ownership-rules)
-- [Work Item schema and lifecycle](#work-item-schema-and-lifecycle)
-- [Todo, Assignment, Material, and child rules](#todo-assignment-material-and-child-rules)
+- [Work Item document and lifecycle](#work-item-document-and-lifecycle)
+- [Operational state](#operational-state)
+- [Assignment and child rules](#assignment-and-child-rules)
 - [Test and Review exemption voting](#test-and-review-exemption-voting)
-- [Completion and recovery invariants](#completion-and-recovery-invariants)
+- [Completion, archives, and recovery](#completion-archives-and-recovery)
 
 ## Object and ownership rules
 
-| Object | State entry | Writer | Purpose |
+| Object | Representation | Writer | Purpose |
 | --- | --- | --- | --- |
-| Work Item | One `index.md` | Its Main only | Independently acceptable, resumable delivery or exploration goal |
-| Assignment | Entry in the owning Work Item | Owning Main | One bounded role execution |
-| Material | Ordinary task-local file plus index pointer | Assigned Architecture/Test/Review role | Retained design work or unusually useful long evidence |
-| Child Work Item | Its own `index.md` | Its Child Main only | Independently acceptable subgoal needing recursive coordination |
+| Work Item | One plain-Markdown `work.md` | Its Main only | Semantic, user-readable record for one independently acceptable goal |
+| Operational state | Sibling `state.json` while open | Its Main through the helper | Disposable claims, leases, active routing, votes, and lifecycle coordination |
+| Assignment | Runtime entry plus transient role message | Owning Main for state; role for its message | One bounded Architecture, Development, Test, Review, Retest, or Rereview execution |
+| Child Work Item | Its own `work.md` and open-state sibling | Its Child Main only | Independently acceptable subgoal needing recursive coordination |
 
-Role protocols and write scopes are advisory collaboration boundaries. Never describe them as runtime filesystem or security isolation.
+There is one semantic Markdown document per Main-owned Work Item, not one document for the whole task tree. `state.json` is separate machine data and never a competing semantic source. Role protocols and write scopes are advisory collaboration boundaries, not runtime filesystem or security isolation.
 
-## Work Item schema and lifecycle
+## Work Item document and lifecycle
 
-Use semantic lowercase kebab-case IDs that describe the deliverable. Reject stage, role, and transit names such as `phase-0`, `phase-1`, `development`, `implementation`, `test`, `review`, `retest`, and `rereview` even with numeric or batch prefixes.
+Use semantic lowercase kebab-case IDs that describe the deliverable. Reject stage, role, and transit names such as `phase-0`, `phase-1`, `development`, `implementation`, `test`, `review`, `retest`, and `rereview`, including numeric or batch prefixes.
 
-Each Work Item frontmatter has:
+An open Work Item tree has this shape:
 
-```yaml
-id: semantic-deliverable-id
-name: Human-readable outcome
-summary: One sentence describing the deliverable and its value.
-keywords: [three, to, eight, search-terms]
-type: delivery | exploration
-status: active | paused | blocked | completed | cancelled
-stage: align | design | develop | verify | close
-parent: relative/path/to/index.md
-owner: session-or-agent-id
-lease_until: ISO-8601-with-timezone
-updated_at: ISO-8601-with-timezone
+```text
+.agent-work/open/<work-item-id>/
+|-- work.md
+|-- state.json
+`-- children/<child-id>/
+    |-- work.md
+    `-- state.json
 ```
 
-Use empty strings for `owner` and `lease_until` before claim. A top-level Work Item points to the root index; a child points to its parent Work Item index.
+`work.md` is direct Markdown prose and checklists with no YAML frontmatter, fenced JSON, capability matrix, raw role envelope, execution log, or machine-controlled block. Keep its sections concise and useful to a person:
 
-Stages describe current state, never directories:
+- outcome and success conditions;
+- confirmed scope, decisions, constraints, and unresolved issues;
+- current Work checklist and completed delivery facts;
+- child delivery contracts, links, acceptance, returned results, and artifacts;
+- references to authoritative project artifacts.
+
+Stages are operational state, never directories:
 
 ```text
 align -> design -> develop -> verify -> close
 ```
 
-Use `design` only for a substantive Architecture Assignment. A clear user request supplies confirmed goal input without a confirmation ceremony. Pause for the user only when ambiguity would change the outcome, permissions, irreversible effects, material cost, or an accepted product/architecture decision.
+Use `design` only for a substantive Architecture Assignment. A clear user request supplies confirmed goal input without a confirmation ceremony. Pause for the user only when ambiguity would change the outcome, permissions, irreversible effects, material cost, or an accepted product or architecture decision.
 
-The fixed body sections are Goal, Success criteria, Confirmed decisions, Current progress, Todo, Assignments, Children, Materials, Verification decision and evidence, and Result. Mutate controlled blocks through `workflow.mjs`; missing, duplicate, or crossed markers are validation failures.
+## Operational state
 
-## Todo, Assignment, Material, and child rules
+The helper stores IDs, status, stage, parent linkage, ownership leases, active Todo and Assignment routing, verification votes, and other runtime coordination in `state.json`. Main does not hand-maintain JSON. Ordinary roles must never write `work.md`, `state.json`, or any other task state.
 
-- Keep exactly one `[>]` Todo in every active Work Item. A Todo is a bounded step Main can describe and route; it has no separate index.
-- Record Architecture, Development, Test, Review, Retest, and Rereview as Assignments. An Assignment never owns a directory or `index.md`.
-- Record only concise role results in the Assignment entry. The return envelope, diffs, project artifacts, and registered Materials are the evidence sources.
-- Architecture may write only explicitly assigned `materials/architecture/` paths. Test and Review may write only explicitly assigned `materials/test/` or `materials/review/` paths and only for long reusable evidence. Development creates no task Material by default.
-- Register each retained Material with relative path, one-sentence summary, and purpose. Reject traversal or paths outside the role's allowed Material directory.
+Keep exactly one in-progress Todo in every active Work Item. Todo and Assignment runtime records exist only to coordinate unfinished work; do not reproduce a chronological Assignment ledger or paste role returns into `work.md`. Main extracts useful delivery facts from transient messages and routes durable engineering knowledge to authoritative project artifacts.
 
-Promote a subgoal to Child Work Item only when all are true:
+Default list, find, resume, handoff, child synchronization, and packet generation operate only on open Work Items and the exact current pointers needed for the action. Directory depth never authorizes reading ancestors, siblings, descendants, or archives. History is a separate explicit operation and should return lightweight candidates before any archived `work.md` is opened.
+
+## Assignment and child rules
+
+- Architecture, Development, Test, Review, Retest, and Rereview are Assignments, not Work Items. They own no task document, directory, or retained result file.
+- Architecture, Test, and Review return concise transient messages. Development returns a concise transient message plus references to authoritative project artifacts it changed.
+- Durable facts belong in project code, tests, configuration, schemas, contracts, constraints, or decision documents. Task-local materials and role-result persistence are not part of the workflow.
+- Parallel Development is permitted only when Assignments have no ordering dependency, disjoint write scopes, settled shared interfaces, no shared migration, lockfile, global configuration, generated file, or model, a named integrator, enough runtime slots, and meaningful critical-path benefit.
+
+Promote a subgoal to a Child Work Item only when all are true:
 
 1. It can be accepted independently and return a bounded result to the parent.
 2. It needs multiple Todos, multiple role executions, or cross-session recovery.
 3. It stays inside the parent's confirmed goal, authority, and cost.
-4. A Child Main can own and converge it while the parent consumes only a result summary and artifact pointers.
+4. A Child Main can own and converge it while the parent consumes only its contract, link, acceptance, result, and artifact references.
 
-A single Todo, ordinary implementation step, stage, role execution, or one-step relay is never a Child Work Item. Parent Main creates the child entry; Child Main then writes only the child index. Child completion is recorded child-first, then returned as a concise event for parent update or later `child sync`.
-
-Parallel Development is permitted only when all Assignments have no ordering dependency, disjoint write scopes, stable shared interfaces, no shared migration/lockfile/global configuration/generated file/model, a named integrator, enough runtime slots, and meaningful critical-path benefit.
+A single Todo, ordinary implementation step, stage, role execution, or one-step relay is never a Child Work Item. The parent creates the child delivery contract and link; the Child Main then owns only the child `work.md` and `state.json`. Parent and child never mirror each other's internal checklist, progress, role results, or machine state. Child completion is recorded child-first and returned as a concise event for parent acceptance.
 
 ## Test and Review exemption voting
 
@@ -85,13 +90,13 @@ development_requires_review = OR(each Development.requires_review)
 
 When Architecture participated and its analysis still covers the final implementation, Architecture, aggregated Development, and Main each cast one vote per role. At least two `false` votes are required to exempt that role. Every other result runs it.
 
-When Architecture did not participate, failed, or no longer covers the changed surface, its vote is absent. Development is advisory and Main makes the final decision, recording an evidence-based reason. Main must not pre-exempt a role before Development reports.
+When Architecture did not participate, failed, or no longer covers the changed surface, its vote is absent. Development is advisory and Main makes the final decision, recording an evidence-based reason in operational state. Main must not pre-exempt a role before Development reports.
 
 A `false` vote is valid only when independent verification would add no meaningful signal, for example:
 
 - no executable behavior, runtime configuration, schema, infrastructure, generated runtime artifact, or public interface changed;
 - a fully mechanical change is covered by reproducible deterministic checks;
-- only tests, comments, formatting, or static non-runtime material changed;
+- only tests, comments, formatting, or static non-runtime documentation changed;
 - for Test, a behavior-preserving internal refactor has complete automated coverage of the success criteria;
 - for Review, a deterministic generator produced the change with no semantic decision.
 
@@ -99,13 +104,12 @@ A `false` vote is valid only when independent verification would add no meaningf
 
 Test and Review return `null` for both vote fields. A Test failure routes to Development and then only a Test Assignment is rerun. A Review finding routes to Development and then only a Review Assignment is rerun. Recompute both votes only when a fix changes a shared interface or introduces a new behavior surface. Retest and Rereview remain Assignments.
 
-## Completion and recovery invariants
+## Completion, archives, and recovery
 
-- One unexpired owner lease controls each index; no role or other Main may write it.
-- An active Work Item has exactly one in-progress Todo.
-- A completed parent has no active, paused, or blocked descendant.
-- Parent/child links, semantic IDs, enums, controlled markers, Material paths, and vote results must validate.
-- Root `.agent-work/index.md` lists only active or paused top-level items with name, summary, status, and entry path. Detailed state lives only in each Work Item.
-- Search uses only ID, name, summary, keywords, and Material summaries and returns lightweight candidates. Resume reads the root, the selected Work Item, and only its current pointers; directory depth does not authorize ancestor or sibling reads.
-- Handoff contains only goal, current state, in-progress Todo, active Assignments, blockers, key Materials, and next action.
-- Before completion, run `validate`, reconcile success criteria and required Test/Review outcomes, close descendants, record residual issues, set the result, and then mark the Work Item completed.
+- One unexpired owner lease controls each open Work Item; no role or other Main may write its files.
+- An active Work Item has exactly one in-progress Todo, and a completed parent has no open descendant.
+- Parent and child links, semantic IDs, enums, ownership, active routing, and vote results must validate without treating Markdown prose as machine state.
+- Resume reads only open-work candidates, the selected `work.md` and `state.json`, and exact current pointers. Handoff contains only the outcome, current focus, active work, blockers, key authoritative references, and next action.
+- Before completion, validate the tree, reconcile success conditions and required Test/Review outcomes, close descendants, record residual issues, and curate `work.md` into a factual delivery record that describes what was delivered, accepted, unresolved, and where durable artifacts live.
+- Completion removes runtime-only `state.json` throughout the completed tree and moves the retained `work.md` tree under the archive. The archive is user-readable history, not default Agent context.
+- Default discovery and role dispatch exclude archived Work Items. An explicit history request may locate archived summaries and then open only the selected completed `work.md`; it must not bulk-load historical task trees.

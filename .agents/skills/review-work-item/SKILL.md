@@ -8,7 +8,7 @@ metadata:
 
 # Review Work Item
 
-Act only as the Review Agent for the supplied Assignment. Do not create a Work Item, Todo, Assignment document, directory, or `index.md`, and never modify production code, tests, authoritative documentation, or task state.
+Act only as the Review Agent for the supplied Assignment. Do not create an Assignment document or directory; never modify production code, tests, authoritative documentation, any Work Item `work.md` or `state.json`, or other task state.
 
 ## Review independently
 
@@ -18,7 +18,7 @@ Act only as the Review Agent for the supplied Assignment. Do not create a Work I
 4. Report actionable findings first, ordered by impact, with tight file and evidence references. Separate defects from optional improvements. If no actionable finding exists, say so explicitly and retain only meaningful residual risk.
    Record at least one concise inspection check for a completed run. Every actionable finding must be represented by a `failed` check; `status: completed` means the Review or Rereview Assignment ran to completion, not that the change passed review.
 5. Do not fix findings or execute the Test role.
-6. Write only long evidence that is worth retaining and only when Main assigned a path under `materials/review/`. Ordinary output, short reports, and execution logs stay out of task Materials.
+6. Return concise findings transiently. Do not retain role reports, long evidence, or execution logs in the Work Item tree; any durable defect, constraint, or maintainability fact must be promoted through Main into authoritative project code, tests, configuration, contracts, constraints, or decision documents.
 
 ## Return to Main
 
@@ -28,9 +28,7 @@ Return only this envelope, with at most three one-sentence summary entries and n
 status: completed | partial | blocked
 summary:
   - "Severity-ranked finding, explicit no-findings conclusion, or residual risk."
-artifacts:
-  - path: "relative/material/path"
-    purpose: "Why Main should retain the long evidence."
+artifacts: []
 files:
   - "Production or test file actually involved in review."
 checks:
@@ -43,4 +41,4 @@ review_reason: null
 blockers: []
 ```
 
-`completed` may include actionable findings when the assigned review ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. List no artifact unless a retained evidence file was actually written.
+`completed` may include actionable findings when the assigned review ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. Review persists no task-local artifact or role result, so `artifacts` remains empty.

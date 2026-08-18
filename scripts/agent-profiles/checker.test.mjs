@@ -187,7 +187,7 @@ test("accepts standard block scalars, empty metadata, and arbitrary metadata key
   assert.equal(result.ok, true, result.diagnostics.map(formatDiagnostic).join("\n"));
 });
 
-test("main Skill requires empty-history dispatch and Main-only task state", async () => {
+test("main Skill requires empty-history dispatch and the plain document/state contract", async () => {
   const source = await readFile(
     path.join(
       PROJECT_ROOT,
@@ -200,6 +200,9 @@ test("main Skill requires empty-history dispatch and Main-only task state", asyn
     source,
     /(?:only|sole|unique|single)[^\n]{0,100}(?:Main|owner)|(?:Main|owner)[^\n]{0,100}(?:only|sole|unique|single)/i,
   );
+  assert.match(source, /plain-Markdown `work\.md`/i);
+  assert.match(source, /sibling[^\n]+`state\.json`/i);
+  assert.match(source, /(?:archive[^\n]+exclude|exclude[^\n]+archive)/i);
 });
 
 test("enforces Agent Skills field names, types, and bounds", async (t) => {
@@ -317,7 +320,7 @@ test("collects independent schema and return-contract diagnostics deterministica
   }
 });
 
-test("requires the workflow registry, workflow resources, role packet, and state boundaries", async (t) => {
+test("requires workflow resources, transient role returns, and document/state boundaries", async (t) => {
   const root = await createFixture();
   t.after(() => rm(root, { recursive: true, force: true }));
   const mainRoot = path.join(root, ".agents/skills/orchestrate-engineering-team");
@@ -344,6 +347,58 @@ test("requires the workflow registry, workflow resources, role packet, and state
   assert.ok(result.diagnostics.some(
     ({ code, file }) => code === "FILE_MISSING" && file.endsWith("/scripts/value-policy.mjs"),
   ));
+});
+
+test("rejects legacy task-index wording and missing transient-result guidance", async (t) => {
+  const root = await createFixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const mainPath = path.join(
+    root,
+    ".agents/skills/orchestrate-engineering-team/SKILL.md",
+  );
+  const packetPath = path.join(
+    root,
+    ".agents/skills/orchestrate-engineering-team/assets/role-task-packet.md",
+  );
+  const main = await readFile(mainPath, "utf8");
+  const packet = await readFile(packetPath, "utf8");
+  await Promise.all([
+    writeFile(
+      mainPath,
+      main
+        .replaceAll("work.md", "task-record.md")
+        .replaceAll("state.json", "coordination.json")
+        .replace(/archiv\w*/gi, "completed storage"),
+    ),
+    writeFile(
+      packetPath,
+      packet.replace(/[^\n]*(?:transient|do not persist|must not persist)[^\n]*(?:return|result|message)[^\n]*\n?/i, ""),
+    ),
+  ]);
+
+  const result = await checkAgentProfiles(root);
+  const codes = result.diagnostics.map(({ code }) => code);
+  assert.ok(codes.includes("WORK_DOCUMENT"));
+  assert.ok(codes.includes("SEPARATE_STATE"));
+  assert.ok(codes.includes("ARCHIVE_CONTEXT"));
+  assert.ok(codes.includes("TRANSIENT_RESULT"));
+});
+
+test("rejects obsolete JSON-in-Markdown template filenames", async (t) => {
+  const root = await createFixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const obsoletePath = path.join(
+    root,
+    ".agents/skills/orchestrate-engineering-team/assets/workspace-index.md",
+  );
+  await writeFile(obsoletePath, "obsolete template\n");
+
+  const result = await checkAgentProfiles(root);
+  assert.ok(
+    result.diagnostics.some(
+      ({ code, file }) => code === "OBSOLETE_RESOURCE" && file.endsWith("workspace-index.md"),
+    ),
+  );
 });
 
 test("CLI uses exit 0 for success, 1 for validation failure, and 2 for bad usage", async (t) => {

@@ -97,7 +97,7 @@ test("installed-suite validation accepts the five canonical Skills and resources
   });
 });
 
-test("installed-suite validation executes installed templates and rejects template corruption", async (t) => {
+test("installed-suite validation rejects corruption in the installed role packet", async (t) => {
   const targetRoot = await mkdtemp(path.join(os.tmpdir(), "installed-template-runtime-"));
   t.after(() => rm(targetRoot, { recursive: true, force: true }));
   await mkdir(path.join(targetRoot, ".agents"), { recursive: true });
@@ -108,23 +108,19 @@ test("installed-suite validation executes installed templates and rejects templa
   );
 
   await assertInstalledSkillSuite(targetRoot);
-  const installedTemplate = path.join(
+  const installedPacket = path.join(
     targetRoot,
-    ".agents/skills/orchestrate-engineering-team/assets/work-item-index.md",
+    ".agents/skills/orchestrate-engineering-team/assets/role-task-packet.md",
   );
-  const template = await readFile(installedTemplate, "utf8");
+  const packet = await readFile(installedPacket, "utf8");
   await writeFile(
-    installedTemplate,
-    template.replace(
-      "⟪ORCHESTRATE:WORK_GOAL_JSON:6D71B11E⟫",
-      "corrupted-installed-template",
-    ),
+    installedPacket,
+    packet.replace(/fork_turns\s*:\s*["']?none["']?/i, "fork_turns: all"),
   );
 
   await assert.rejects(
     assertInstalledSkillSuite(targetRoot),
-    (error) => error.code === "INVALID_TEMPLATE"
-      && /template sentinel set does not match replacements/.test(error.message),
+    /must carry the explicit fork_turns: none dispatch requirement/,
   );
 });
 

@@ -11,11 +11,11 @@ Role: <Architecture | Development | Test | Review>
 
 Allowed reads:
 
-- <Exact project or Material path and why it is needed.>
+- <Exact authoritative project path and why it is needed.>
 
 Allowed writes:
 
-- <Exact assigned file, module, or permitted role Material path; use `none` when read-only.>
+- <Exact assigned project file or module; use `none` when read-only.>
 
 ## Directly relevant confirmed decisions
 
@@ -37,11 +37,11 @@ Unavailable:
 
 ## Dispatch
 
-Spawn this role with `fork_turns: "none"`. The role must not create or modify any Work Item `index.md` or other task state.
+Spawn this role with `fork_turns: "none"`. The role must not create or modify any Work Item `work.md`, `state.json`, or other task state.
 
 ## Return
 
-Return only the following YAML. Do not include progress narration, private reasoning, full logs, the parent task, or unknown fields.
+Return only the following YAML. Role returns are transient messages and must not be persisted as task-local history. Do not include progress narration, private reasoning, full logs, the parent task, or unknown fields.
 
 ```yaml
 status: completed | partial | blocked
@@ -63,3 +63,4 @@ blockers: []
 ```
 
 Architecture and Development return boolean votes and reasons. Test and Review return `null` for both votes and reasons. `partial` and `blocked` require actionable blockers.
+Only Development may list authorized authoritative project artifacts it changed; Architecture, Test, Retest, Review, and Rereview must return `artifacts: []`.

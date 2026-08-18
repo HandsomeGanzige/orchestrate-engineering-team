@@ -8,12 +8,19 @@ import {
 import {
   completionIssues,
   computeVotes,
+  hasCompletedEvidence,
   projectCompletedAssignmentVote,
   validateRoleResult,
 } from './verification.mjs';
 import {
+  appendSectionLine,
+  replaceAcceptanceEntry,
+  replaceMarkdownStatus,
+  replaceSection,
+  validateId,
+} from './workflow-document.mjs';
+import {
   boundedString,
-  normalizedMaterialPath,
   normalizeStrings,
   normalizedScope,
   scalar,
@@ -84,6 +91,12 @@ function recordSuccessEvidence(document, input) {
     evidence: input.evidence,
     pointers,
   });
+  const pointerText = pointers.length ? ` \u2014 Pointers: ${pointers.map((pointer) => `\`${pointer}\``).join(', ')}` : '';
+  replaceAcceptanceEntry(
+    document,
+    input.criterion,
+    `- [x] ${input.criterion} \u2014 Evidence: ${input.evidence}${pointerText}`,
+  );
 }
 
 /**
@@ -104,7 +117,7 @@ function validateWorkMutation(action, input) {
     );
     return;
   }
-  const allowed = new Set(['status', 'stage', 'progress', 'result', 'nextAction', 'completeTodo']);
+  const allowed = new Set(['status', 'stage', 'progress', 'result', 'artifacts', 'nextAction', 'completeTodo']);
   ensure(
     Object.keys(input).every((key) => allowed.has(key)),
     'work update contains unknown field',
@@ -139,6 +152,7 @@ function applyPreparedWork(document, action, input) {
       'INVALID_INPUT',
     );
     document.blocks.current_progress = input.progress;
+    document.markdown = replaceSection(document.markdown, 'Current focus', input.progress);
   }
   if (input.result !== undefined) {
     ensure(
@@ -148,6 +162,13 @@ function applyPreparedWork(document, action, input) {
     );
     document.blocks.result.summary = [input.result];
   }
+  if (input.artifacts !== undefined) {
+    ensure(Array.isArray(input.artifacts), 'artifacts must be an array', 'INVALID_INPUT');
+    document.blocks.result.artifacts = input.artifacts.map((artifact) => {
+      ensure(artifact && typeof artifact.path === 'string' && typeof artifact.purpose === 'string', 'artifact needs path and purpose', 'INVALID_INPUT');
+      return { path: normalizedScope(artifact.path), purpose: boundedString(artifact.purpose, 'artifact purpose') };
+    });
+  }
   if (input.nextAction !== undefined) {
     ensure(
       typeof input.nextAction === 'string' && input.nextAction.length <= 500,
@@ -155,6 +176,14 @@ function applyPreparedWork(document, action, input) {
       'INVALID_INPUT',
     );
     document.blocks.result.next_action = input.nextAction;
+    document.blocks.current_progress = input.nextAction;
+    document.markdown = replaceSection(document.markdown, 'Current focus', input.nextAction);
+  }
+  if (input.result !== undefined || input.artifacts !== undefined) {
+    document.markdown = replaceSection(document.markdown, 'Completed', [
+      ...document.blocks.result.summary.map((item) => `- ${item}`),
+      ...document.blocks.result.artifacts.map((item) => `- Artifact: \`${item.path}\` \u2014 ${item.purpose}`),
+    ].join('\n'));
   }
   if (input.status === 'completed') {
     ensure(
@@ -178,6 +207,7 @@ function applyPreparedWork(document, action, input) {
     );
   }
   if (input.status !== undefined) document.frontmatter.status = input.status;
+  if (input.status !== undefined) document.markdown = replaceMarkdownStatus(document.markdown, input.status);
   return { status: document.frontmatter.status, stage: document.frontmatter.stage };
 }
 
@@ -214,6 +244,7 @@ export function applyWork(document, action = 'update', input) {
  */
 function validateDecisionMutation(action, input) {
   ensure(action === 'add', 'decision supports only add', 'INVALID_COMMAND');
+  validateId(input.id);
   ensure(
     typeof input.id === 'string'
       && input.id
@@ -222,6 +253,7 @@ function validateDecisionMutation(action, input) {
     'decision id and summary are required',
     'INVALID_INPUT',
   );
+  ensure(!/[\r\n\u2028\u2029]/u.test(input.summary), 'decision summary must be a single line', 'INVALID_INPUT');
 }
 
 /**
@@ -233,11 +265,22 @@ function validateDecisionMutation(action, input) {
  */
 function applyPreparedDecision(document, input) {
   ensureUnique(document.blocks.confirmed_decisions, input.id, 'decision');
+  const evidence = normalizeStrings(input.evidence ?? [], 'evidence', { max: 20 });
   document.blocks.confirmed_decisions.push({
     id: input.id,
     summary: input.summary,
-    evidence: normalizeStrings(input.evidence ?? [], 'evidence', { max: 20 }),
+    evidence,
   });
+  const links = evidence.map((pointer) => {
+    const label = pointer.replaceAll('\\', '\\\\').replaceAll(']', '\\]');
+    const destination = encodeURI(pointer).replaceAll('(', '%28').replaceAll(')', '%29');
+    return `[${label}](${destination})`;
+  });
+  appendSectionLine(
+    document,
+    'Decisions',
+    `- **${input.id}:** ${input.summary}${links.length ? `\n  - Evidence: ${links.join(', ')}` : ''}`,
+  );
   return { decision: input.id };
 }
 
@@ -285,12 +328,9 @@ function validateTodoMutation(action) {
  */
 function applyPreparedTodo(document, action, input) {
   if (action === 'add') {
-    ensure(
-      typeof input.id === 'string' && /^[a-z][a-z0-9-]*$/.test(input.id),
-      'todo id is invalid',
-      'INVALID_INPUT',
-    );
+    validateId(input.id);
     ensure(typeof input.text === 'string' && input.text.trim(), 'todo text is required', 'INVALID_INPUT');
+    if (input.assignment) itemById(document.blocks.assignments, validateId(input.assignment), 'assignment');
     ensureUnique(document.blocks.todo, input.id, 'todo');
     document.blocks.todo.push({
       id: input.id,
@@ -447,11 +487,7 @@ function validateAssignmentMutation(action) {
  */
 function applyPreparedAssignment(document, action, input) {
   if (action === 'add') {
-    ensure(
-      typeof input.id === 'string' && /^[a-z][a-z0-9-]*$/.test(input.id),
-      'assignment id is invalid',
-      'INVALID_INPUT',
-    );
+    validateId(input.id);
     ensure(ROLES.has(input.role), 'invalid assignment role', 'INVALID_INPUT');
     ensureUnique(document.blocks.assignments, input.id, 'assignment');
     const assignment = {
@@ -485,7 +521,8 @@ function applyPreparedAssignment(document, action, input) {
       sharedInterfaceStable: input.sharedInterfaceStable !== false,
       touchesGlobal: input.touchesGlobal === true,
       integrator: scalar(input.integrator),
-      result: null,
+      blockers: [],
+      receipt: null,
     };
     ensure(assignment.objective, 'assignment objective is required', 'INVALID_INPUT');
     ensure(
@@ -499,14 +536,13 @@ function applyPreparedAssignment(document, action, input) {
       'INVALID_INPUT',
     );
     for (const dependency of assignment.dependsOn) {
-      ensure(
-        /^[a-z][a-z0-9-]*$/.test(dependency),
-        `invalid assignment dependency: ${dependency}`,
-        'INVALID_INPUT',
-      );
+      validateId(dependency);
       itemById(document.blocks.assignments, dependency, 'assignment prerequisite');
     }
     document.blocks.assignments.push(assignment);
+    if (['architecture', 'development'].includes(assignment.role)) {
+      document.blocks.verification.decisions = { test: null, review: null };
+    }
     return { assignment: input.id, action };
   }
 
@@ -535,14 +571,18 @@ function applyPreparedAssignment(document, action, input) {
     }
     assignment.status = 'in_progress';
     assignment.blockers = [];
-    if (assignment.result?.status === 'blocked') assignment.result = null;
+    if (['partial', 'blocked'].includes(assignment.receipt?.status)) assignment.receipt = null;
     if (input.agentId !== undefined) assignment.agentId = scalar(input.agentId);
   } else if (action === 'complete') {
     ensure(
-      assignment.status === 'in_progress' && assignment.result?.status === 'completed',
+      assignment.status === 'in_progress' && assignment.receipt?.status === 'completed',
       'assignment requires a completed role result before completion',
       'INVALID_TRANSITION',
     );
+    const completedOrders = document.blocks.assignments
+      .map((entry) => entry.receipt?.completed_order)
+      .filter(Number.isInteger);
+    assignment.receipt.completed_order = Math.max(0, ...completedOrders) + 1;
     assignment.status = 'completed';
     projectCompletedAssignmentVote(document, assignment);
   } else {
@@ -553,6 +593,9 @@ function applyPreparedAssignment(document, action, input) {
     );
     assignment.status = 'blocked';
     assignment.blockers = normalizeStrings(input.blockers, 'blockers', { min: 1, max: 10 });
+  }
+  if (['architecture', 'development'].includes(assignment.role)) {
+    document.blocks.verification.decisions = { test: null, review: null };
   }
   return { assignment: input.id, action };
 }
@@ -582,7 +625,7 @@ export function applyAssignment(document, action, input) {
 }
 
 /**
- * Attaches a validated compact role result to an in-progress Assignment.
+ * Converts a transient role result into the minimum operational receipt.
  *
  * @param {object} document - Mutable Work Item document.
  * @param {{assignment: string, result: object}} input - Assignment identity and role result envelope.
@@ -596,8 +639,24 @@ export function applyResult(document, input) {
     'INVALID_TRANSITION',
   );
   const result = validateRoleResult(input.result, assignment.role);
-  assignment.result = structuredClone(result);
-  if (result.status === 'blocked') assignment.status = 'blocked';
+  const receipt = { status: result.status };
+  if (assignment.role === 'development') receipt.changed_surface = [...new Set(result.files.map(normalizedScope))].sort();
+  if (['architecture', 'development'].includes(assignment.role)) {
+    receipt.votes = {
+      test: { requires: result.requires_test, reason: result.test_reason },
+      review: { requires: result.requires_review, reason: result.review_reason },
+    };
+  }
+  if (['test', 'retest', 'review', 'rereview'].includes(assignment.role)) {
+    receipt.passed = result.status === 'completed'
+      && result.checks.length > 0
+      && result.checks.every((check) => check.result === 'passed');
+  }
+  assignment.receipt = receipt;
+  if (['partial', 'blocked'].includes(result.status)) {
+    assignment.status = 'blocked';
+    assignment.blockers = [...result.blockers];
+  }
   return { assignment: assignment.id, result_status: result.status };
 }
 
@@ -645,7 +704,31 @@ function applyPreparedVote(document, action, input) {
     );
     const vote = { test: voteValue(input, 'test'), review: voteValue(input, 'review') };
     if (input.role === 'architecture') {
-      verification.votes.architecture = { ...vote, covered: input.covered !== false };
+      ensure(typeof input.assignment === 'string' && input.assignment, 'architecture vote requires assignment', 'INVALID_VOTE');
+      const assignment = itemById(document.blocks.assignments, input.assignment, 'assignment');
+      ensure(
+        assignment.role === 'architecture'
+          && assignment.status === 'completed'
+          && assignment.receipt?.status === 'completed',
+        'architecture vote requires a completed Architecture result',
+        'INVALID_VOTE',
+      );
+      const latestArchitecture = document.blocks.assignments
+        .filter((entry) => entry.role === 'architecture'
+          && entry.status === 'completed'
+          && entry.receipt?.status === 'completed')
+        .sort((left, right) => left.receipt.completed_order - right.receipt.completed_order)
+        .at(-1);
+      ensure(latestArchitecture === assignment, 'architecture vote must use the latest completed Architecture result', 'INVALID_VOTE');
+      ensure(
+        input.requiresTest === assignment.receipt.votes.test.requires
+          && input.testReason === assignment.receipt.votes.test.reason
+          && input.requiresReview === assignment.receipt.votes.review.requires
+          && input.reviewReason === assignment.receipt.votes.review.reason,
+        'architecture vote must exactly match the completed Architecture result',
+        'INVALID_VOTE',
+      );
+      verification.votes.architecture = { assignment: assignment.id, ...vote, covered: input.covered !== false };
     } else if (input.role === 'main') {
       verification.votes.main = vote;
     } else {
@@ -661,15 +744,15 @@ function applyPreparedVote(document, action, input) {
         'INVALID_VOTE',
       );
       ensure(
-        assignment.status === 'completed' && assignment.result?.status === 'completed',
+        assignment.status === 'completed' && assignment.receipt?.status === 'completed',
         'development vote requires a completed Development result',
         'INVALID_VOTE',
       );
       ensure(
-        input.requiresTest === assignment.result.requires_test
-          && input.testReason === assignment.result.test_reason
-          && input.requiresReview === assignment.result.requires_review
-          && input.reviewReason === assignment.result.review_reason,
+        input.requiresTest === assignment.receipt.votes.test.requires
+          && input.testReason === assignment.receipt.votes.test.reason
+          && input.requiresReview === assignment.receipt.votes.review.requires
+          && input.reviewReason === assignment.receipt.votes.review.reason,
         'development vote must exactly match the completed Development result',
         'INVALID_VOTE',
       );
@@ -677,13 +760,14 @@ function applyPreparedVote(document, action, input) {
         .filter((entry) => entry.assignment !== input.assignment);
       verification.votes.development.push({ assignment: input.assignment, ...vote });
     }
+    verification.decisions = { test: null, review: null };
     return { vote: input.role };
   }
   const development = document.blocks.assignments
     .filter((assignment) => assignment.role === 'development');
   ensure(
     development.every((assignment) => assignment.status === 'completed'
-      && assignment.result?.status === 'completed'),
+      && assignment.receipt?.status === 'completed'),
     'vote computation requires every Development assignment to have a completed result',
     'INCOMPLETE_VOTE',
   );
@@ -721,62 +805,6 @@ export function applyVote(document, action, input) {
 }
 
 /**
- * Validates that a Material command uses the supported add action.
- *
- * @param {string} action - Candidate Material action.
- * @returns {void} Returns only for `add`.
- */
-function validateMaterialMutation(action) {
-  ensure(action === 'add', 'material supports only add', 'INVALID_COMMAND');
-}
-
-/**
- * Registers an already validated, role-scoped Material in a Work Item.
- *
- * @param {object} document - Mutable Work Item document.
- * @param {object} input - Role, path, summary, and purpose for the Material.
- * @returns {{material: string}} Canonical registered Material path.
- */
-function applyPreparedMaterial(document, input) {
-  const relative = normalizedMaterialPath(input.role, input.path);
-  boundedString(input.summary, 'material summary');
-  boundedString(input.purpose, 'material purpose');
-  ensureUnique(document.blocks.materials, relative, 'material');
-  document.blocks.materials.push({
-    id: relative,
-    role: input.role,
-    path: relative,
-    summary: input.summary,
-    purpose: input.purpose,
-  });
-  return { material: relative };
-}
-
-/**
- * Validates a Material action and returns a reusable document mutator.
- *
- * @param {string} action - Material action, currently `add`.
- * @param {object} input - Material payload captured by the closure.
- * @returns {(document: object) => {material: string}} Prepared Material mutator.
- */
-export function prepareMaterialMutation(action, input) {
-  validateMaterialMutation(action);
-  return (document) => applyPreparedMaterial(document, input);
-}
-
-/**
- * Validates and immediately registers a role-scoped Material.
- *
- * @param {object} document - Mutable Work Item document.
- * @param {string} action - Material action.
- * @param {object} input - Material payload.
- * @returns {{material: string}} Canonical registered Material path.
- */
-export function applyMaterial(document, action, input) {
-  return prepareMaterialMutation(action, input)(document);
-}
-
-/**
  * Builds the minimal empty-history packet for one Assignment.
  *
  * @param {object} document - Work Item containing the Assignment and permitted context.
@@ -793,9 +821,6 @@ export function makePacket(document, assignmentId) {
     allowed_read: assignment.read,
     allowed_write: assignment.write,
     confirmed_decisions: assignment.decisions,
-    material_pointers: document.blocks.materials
-      .filter((material) => assignment.read.includes(material.path))
-      .map(({ path, summary, purpose }) => ({ path, summary, purpose })),
     capabilities: {
       required: assignment.capabilities.required,
       available: assignment.capabilities.available,
@@ -819,23 +844,21 @@ export function makePacket(document, assignmentId) {
     const developmentResults = document.blocks.assignments
       .filter((item) => item.role === 'development'
         && item.status === 'completed'
-        && item.result?.status === 'completed')
-      .map((item) => item.result);
+        && item.receipt?.status === 'completed')
+      .map((item) => item.receipt);
     packet.verification_context = {
-      changed_surface: [...new Set(developmentResults.flatMap((result) => result.files))].sort(),
-      development_summary: developmentResults.flatMap((result) => result.summary).slice(0, 3),
+      changed_surface: [...new Set(developmentResults.flatMap((receipt) => receipt.changed_surface ?? []))].sort(),
       decisions: document.blocks.verification.decisions,
     };
     if (['review', 'rereview'].includes(assignment.role)) {
       packet.work_context = { goal: document.blocks.goal };
-      const latestTest = document.blocks.assignments
+      const completedTests = document.blocks.assignments
         .filter((item) => ['test', 'retest'].includes(item.role)
           && item.status === 'completed'
-          && item.result?.status === 'completed')
-        .at(-1);
-      packet.verification_context.test_summary = latestTest
-        ? latestTest.result.summary.slice(0, 3)
-        : [];
+          && item.receipt?.status === 'completed');
+      packet.verification_context.test_passed = completedTests.length
+        ? hasCompletedEvidence(document, 'test')
+        : null;
     }
   }
   return packet;
@@ -846,7 +869,7 @@ export function makePacket(document, assignmentId) {
  *
  * @param {object} document - Work Item document to summarize.
  * @param {string} work - Work Item reference included in the handoff.
- * @returns {object} Compact goal, state, active work, blockers, Materials, and next action.
+ * @returns {object} Compact goal, state, active work, blockers, and next action.
  */
 export function makeHandoff(document, work) {
   return {
@@ -869,9 +892,7 @@ export function makeHandoff(document, work) {
       })),
     blockers: [...document.blocks.todo, ...document.blocks.assignments]
       .filter((item) => item.status === 'blocked')
-      .flatMap((item) => item.blockers ?? item.result?.blockers ?? []),
-    key_materials: document.blocks.materials
-      .map(({ path, summary, purpose }) => ({ path, summary, purpose })),
+      .flatMap((item) => item.blockers ?? []),
     next_action: document.blocks.result.next_action,
   };
 }
@@ -879,7 +900,7 @@ export function makeHandoff(document, work) {
 /**
  * Scores a Work Item against a normalized lightweight search query.
  *
- * @param {object} document - Work Item document whose metadata and Material summaries are searchable.
+ * @param {object} document - Work Item document whose metadata is searchable.
  * @param {string} query - Lowercase query text.
  * @returns {{score: number, reason: string}|null} Ranked match metadata, or `null` when nothing matches.
  */
@@ -896,9 +917,6 @@ export function matchWork(document, query) {
     || frontmatter.name.toLowerCase().includes(query)
     || frontmatter.id.toLowerCase().includes(query)) {
     return { score: 200, reason: 'summary/name' };
-  }
-  if (document.blocks.materials.some((material) => material.summary.toLowerCase().includes(query))) {
-    return { score: 100, reason: 'material summary' };
   }
   return null;
 }

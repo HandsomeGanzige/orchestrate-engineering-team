@@ -1,7 +1,9 @@
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
   newWorkDocument,
+  upsertChildDelivery,
   validateDocument,
   validateLeaseMinutes,
 } from './workflow-document.mjs';
@@ -15,46 +17,33 @@ import {
   matchWork,
   prepareAssignmentMutation,
   prepareDecisionMutation,
-  prepareMaterialMutation,
   prepareTodoMutation,
   prepareVoteMutation,
   prepareWorkMutation,
 } from './work-model.mjs';
 import {
   assertOwner,
+  completeAndArchiveAt,
   createAt,
+  createChildAtTransaction,
   exists,
   initWorkspace as initializeStore,
   listWork,
   mutateAt,
+  readArchivedMarkdown,
+  readCompletionReceipt,
+  readHistoryIndex,
   readAt,
+  resumeCommittedArchiveCleanup,
+  resolveHistory,
   resolveWork,
-  workspaceIndex,
+  waitForWorkflowTestBarrier,
+  withWorkflowTransaction,
 } from './workflow-store.mjs';
 import {
   completionIssues,
-  computeVotes,
-  resultVote,
 } from './verification.mjs';
-import { normalizedMaterialPath, normalizeStrings, scalar } from './value-policy.mjs';
-
-/**
- * Projects one Work Item into the lightweight entry stored by a parent or workspace root.
- *
- * @param {string} file - Work Item index path.
- * @param {string} root - Workspace boundary used to relativize the path.
- * @param {object} document - Parsed Work Item document.
- * @returns {{id: string, path: string, name: string, summary: string, status: string}} Canonical link projection.
- */
-function rootEntry(file, root, document) {
-  return {
-    id: document.frontmatter.id,
-    path: path.relative(root, file),
-    name: document.frontmatter.name,
-    summary: document.frontmatter.summary,
-    status: document.frontmatter.status,
-  };
-}
+import { normalizeStrings, scalar } from './value-policy.mjs';
 
 /**
  * Enforces the minimum evidence required to promote a planned step into a Child Work Item.
@@ -90,7 +79,7 @@ function validateChildEligibility(input) {
  * @returns {Promise<{ok: true, workspace: string}>} Store initialization result.
  */
 export async function initWorkspace({ root, now = new Date() }) {
-  return initializeStore(root, now);
+  return withWorkflowTransaction(root, () => initializeStore(root, now), { create: true });
 }
 
 /**
@@ -100,46 +89,43 @@ export async function initWorkspace({ root, now = new Date() }) {
  * @returns {Promise<{ok: true, work: string, id: string}>} Created Work Item path and identity.
  */
 export async function createWork({ root, input, owner, now = new Date(), childOnly = false }) {
-  await initWorkspace({ root, now });
-  const parentReference = input.parent;
-  if (childOnly) ensure(parentReference, 'child create requires parent', 'INVALID_INPUT');
-  if (parentReference) validateChildEligibility(input);
-  let target;
-  let parentFile;
-  if (parentReference) {
-    parentFile = await resolveWork(root, parentReference);
-    assertOwner(await readAt(parentFile), owner, now);
-    target = path.join(path.dirname(parentFile), 'children', input.id, 'index.md');
-  } else {
-    target = path.join(root, '.agent-work', 'work-items', input.id, 'index.md');
-  }
-  const parentRelative = path.relative(path.dirname(target), parentFile ?? workspaceIndex(root));
-  const document = newWorkDocument(input, parentRelative, now);
-  validateDocument(document, { file: target });
-  await createAt(target, document);
-  const entry = rootEntry(target, root, document);
-  try {
-    if (parentFile) {
-      await mutateAt(parentFile, { owner, now }, (parent) => {
-        ensureUnique(parent.blocks.children, input.id, 'child');
-        parent.blocks.children.push(entry);
-      });
+  return withWorkflowTransaction(root, async () => {
+    await initWorkspace({ root, now });
+    const parentReference = input.parent;
+    if (childOnly) ensure(parentReference, 'child create requires parent', 'INVALID_INPUT');
+    if (parentReference) validateChildEligibility(input);
+    let target;
+    let parentFile;
+    if (parentReference) {
+      parentFile = await resolveWork(root, parentReference);
+      assertOwner(await readAt(parentFile), owner, now);
+      target = path.join(path.dirname(parentFile), 'children', input.id, 'work.md');
     } else {
-      await mutateAt(
-        workspaceIndex(root),
-        { requireOwner: false, renew: false, now },
-        (workspace) => {
-          ensureUnique(workspace.blocks.work_items, input.id, 'work item');
-          workspace.blocks.work_items.push(entry);
-        },
-      );
+      target = path.join(root, '.agent-work', 'open', input.id, 'work.md');
     }
-  } catch (error) {
-    // Documents are atomic individually, but cross-document creation is not transactional;
-    // child/work-first ordering leaves an orphan that workspace validation can identify.
-    throw error;
-  }
-  return { ok: true, work: path.relative(root, target), id: input.id };
+    const parentRelative = parentFile ? path.relative(path.dirname(target), parentFile) : null;
+    const document = newWorkDocument(input, parentRelative, now);
+    validateDocument(document, { file: target });
+    const entry = {
+      id: document.frontmatter.id,
+      path: path.relative(root, target),
+      status: document.frontmatter.status,
+    };
+    if (parentFile) {
+      const link = path.relative(path.dirname(parentFile), target).split(path.sep).join('/');
+      await createChildAtTransaction(root, parentFile, target, document, { owner, now }, (parent, child) => {
+        const existing = parent.blocks.children.find(({ id }) => id === input.id);
+        if (existing) ensure(existing.path === entry.path && existing.status === entry.status, `child conflicts with parent registration: ${input.id}`, 'INVALID_DOCUMENT');
+        else parent.blocks.children.push(entry);
+        upsertChildDelivery(
+          parent,
+          entry,
+          `- [ ] [${child.frontmatter.name}](${link}) \u2014 ${child.blocks.success_criteria.join('; ')}`,
+        );
+      });
+    } else await createAt(target, document);
+    return { ok: true, work: path.relative(root, target), id: input.id };
+  }, { create: true });
 }
 
 /**
@@ -155,22 +141,26 @@ export async function claimWork({
   leaseMinutes = LEASE_MINUTES,
   now = new Date(),
 }) {
-  ensure(typeof owner === 'string' && owner.trim(), '--owner is required', 'INVALID_INPUT');
-  const duration = validateLeaseMinutes(leaseMinutes);
-  const file = await resolveWork(root, work);
-  return mutateAt(file, { requireOwner: false, renew: false, now }, (document) => {
-    const current = document.frontmatter.owner;
-    const expired = !current || Date.parse(document.frontmatter.lease_until) <= now.getTime();
-    ensure(expired || current === owner, `work is leased by ${current}`, 'LEASE_CONFLICT');
-    document.frontmatter.owner = owner;
-    document.frontmatter.lease_until = new Date(now.getTime() + duration * 60_000).toISOString();
-    return {
-      ok: true,
-      work: path.relative(root, file),
-      owner,
-      lease_minutes: duration,
-      lease_until: document.frontmatter.lease_until,
-    };
+  return withWorkflowTransaction(root, async () => {
+    ensure(typeof owner === 'string' && owner.trim(), '--owner is required', 'INVALID_INPUT');
+    const duration = validateLeaseMinutes(leaseMinutes);
+    const file = await resolveWork(root, work);
+    return mutateAt(file, { requireOwner: false, renew: false, now }, (document) => {
+      ensure(['active', 'paused', 'blocked'].includes(document.frontmatter.status), 'completed or cancelled work cannot be claimed', 'INVALID_TRANSITION');
+      const current = document.frontmatter.owner;
+      const expired = !current || Date.parse(document.frontmatter.lease_until) <= now.getTime();
+      ensure(expired || current === owner, `work is leased by ${current}`, 'LEASE_CONFLICT');
+      document.frontmatter.owner = owner;
+      document.frontmatter.lease_until = new Date(now.getTime() + duration * 60_000).toISOString();
+      document.state.lease_minutes = duration;
+      return {
+        ok: true,
+        work: path.relative(root, file),
+        owner,
+        lease_minutes: duration,
+        lease_until: document.frontmatter.lease_until,
+      };
+    });
   });
 }
 
@@ -181,12 +171,14 @@ export async function claimWork({
  * @returns {Promise<{ok: true, work: string, released: true}>} Release confirmation.
  */
 export async function releaseWork({ root, work, owner, now = new Date() }) {
-  const file = await resolveWork(root, work);
-  return mutateAt(file, { requireOwner: false, renew: false, now }, (document) => {
-    assertOwner(document, owner, now);
-    document.frontmatter.owner = '';
-    document.frontmatter.lease_until = '';
-    return { ok: true, work: path.relative(root, file), released: true };
+  return withWorkflowTransaction(root, async () => {
+    const file = await resolveWork(root, work);
+    return mutateAt(file, { requireOwner: false, renew: false, now }, (document) => {
+      assertOwner(document, owner, now);
+      document.frontmatter.owner = '';
+      document.frontmatter.lease_until = '';
+      return { ok: true, work: path.relative(root, file), released: true };
+    });
   });
 }
 
@@ -198,9 +190,11 @@ export async function releaseWork({ root, work, owner, now = new Date() }) {
  * @returns {Promise<{ok: true, work: string} & T>} Relative Work Item path merged with the mutation result.
  */
 export async function mutateWork({ root, work, owner, now = new Date(), mutate }) {
-  const file = await resolveWork(root, work);
-  const result = await mutateAt(file, { owner, now }, mutate);
-  return { ok: true, work: path.relative(root, file), ...result };
+  return withWorkflowTransaction(root, async () => {
+    const file = await resolveWork(root, work);
+    const result = await mutateAt(file, { owner, now }, mutate);
+    return { ok: true, work: path.relative(root, file), ...result };
+  });
 }
 
 /**
@@ -210,39 +204,57 @@ export async function mutateWork({ root, work, owner, now = new Date(), mutate }
  * @returns {Promise<object>} Persisted Work Item mutation result.
  */
 export async function workCommand(args) {
-  const action = args.action ?? 'update';
-  const mutate = prepareWorkMutation(action, args.input);
-  if (action === 'update' && args.input.status === 'completed') {
-    const parentFile = await resolveWork(args.root, args.work);
-    const descendantPrefix = `${path.dirname(parentFile)}${path.sep}children${path.sep}`;
-    for (const candidate of await listWork(args.root)) {
-      if (!candidate.startsWith(descendantPrefix)) continue;
-      const descendant = await readAt(candidate);
-      ensure(
-        ['completed', 'cancelled'].includes(descendant.frontmatter.status),
-        `cannot complete work while descendant ${descendant.frontmatter.id} is ${descendant.frontmatter.status}`,
-        'INCOMPLETE_DESCENDANT',
-      );
+  return withWorkflowTransaction(args.root, async () => {
+    const action = args.action ?? 'update';
+    const mutate = prepareWorkMutation(action, args.input);
+    let file;
+    try {
+      file = await resolveWork(args.root, args.work);
+    } catch (error) {
+      if (!(action === 'update' && args.input.status === 'completed' && error.code === 'WORK_NOT_FOUND')) throw error;
+      const recovery = await resumeCommittedArchiveCleanup(args.root, args.work)
+        ?? await readCompletionReceipt(args.root, args.work);
+      if (!recovery) throw error;
+      return {
+        ok: true,
+        ...recovery.result,
+        work: path.relative(args.root, recovery.archived),
+        archived: true,
+      };
     }
-  }
-  const result = await mutateWork({
-    ...args,
-    mutate,
-  });
-  const file = await resolveWork(args.root, args.work);
-  const document = await readAt(file);
-  const parentFile = path.resolve(path.dirname(file), document.frontmatter.parent);
-  if (parentFile === workspaceIndex(args.root)) {
-    // Work status is committed first; a root-sync failure intentionally leaves a stale link for validation.
-    await mutateAt(parentFile, { requireOwner: false, renew: false, now: args.now }, (workspace) => {
-      workspace.blocks.work_items = workspace.blocks.work_items
-        .filter((entry) => entry.id !== document.frontmatter.id);
-      if (['active', 'paused'].includes(document.frontmatter.status)) {
-        workspace.blocks.work_items.push(rootEntry(file, args.root, document));
+    if (action === 'update' && args.input.status === 'completed') {
+      const parent = await readAt(file);
+      for (const child of parent.blocks.children) {
+        ensure(
+          ['completed', 'cancelled'].includes(child.status),
+          `child delivery ${child.id} must be synchronized before completion`,
+          'INCOMPLETE_CHILD_PROJECTION',
+        );
       }
-    });
-  }
-  return result;
+      const descendantPrefix = `${path.dirname(file)}${path.sep}children${path.sep}`;
+      for (const candidate of await listWork(args.root)) {
+        if (!candidate.startsWith(descendantPrefix)) continue;
+        const descendant = await readAt(candidate);
+        ensure(
+          ['completed', 'cancelled'].includes(descendant.frontmatter.status),
+          `cannot complete work while descendant ${descendant.frontmatter.id} is ${descendant.frontmatter.status}`,
+          'INCOMPLETE_DESCENDANT',
+        );
+      }
+      await waitForWorkflowTestBarrier('WORKFLOW_TEST_COMPLETE_AFTER_DESCENDANTS_BARRIER');
+    }
+    const current = await readAt(file);
+    if (action === 'update' && args.input.status === 'completed' && !current.state.parent) {
+      const { result, archived } = await completeAndArchiveAt(
+        args.root,
+        file,
+        { owner: args.owner, now: args.now ?? new Date() },
+        mutate,
+      );
+      return { ok: true, ...result, work: path.relative(args.root, archived), archived: true };
+    }
+    return mutateWork({ ...args, mutate });
+  });
 }
 
 /**
@@ -314,25 +326,18 @@ export async function childSync({ input, ...args }) {
       );
       const child = await readAt(childFile);
       childEntry.status = child.frontmatter.status;
-      childEntry.name = child.frontmatter.name;
-      childEntry.summary = child.frontmatter.summary;
-      childEntry.result = {
-        summary: child.blocks.result.summary,
-        artifacts: child.blocks.result.artifacts,
-      };
+      const facts = [
+        child.blocks.result.summary.join('; '),
+        child.blocks.result.artifacts.map((item) => `\`${item.path}\` (${item.purpose})`).join('; '),
+      ].filter(Boolean).join('; ');
+      upsertChildDelivery(
+        parent,
+        childEntry,
+        `- [${childEntry.status === 'completed' ? 'x' : ' '}] [${child.frontmatter.name}](children/${childEntry.id}/work.md)${facts ? ` \u2014 ${facts}` : ''}`,
+      );
       return { child: input.id, status: childEntry.status };
     },
   });
-}
-
-/**
- * Registers a role-scoped Material through the common mutation path.
- *
- * @param {{action: string, input: object, [key: string]: unknown}} args - Material action, payload, and common work context.
- * @returns {Promise<object>} Persisted Material registration result.
- */
-export async function materialCommand({ action, input, ...args }) {
-  return mutateWork({ ...args, mutate: prepareMaterialMutation(action, input) });
 }
 
 /**
@@ -342,8 +347,13 @@ export async function materialCommand({ action, input, ...args }) {
  * @returns {Promise<object>} Bounded packet suitable for direct role dispatch.
  */
 export async function packetCommand({ root, work, input }) {
-  const file = await resolveWork(root, work);
-  return makePacket(await readAt(file), input.assignment);
+  return withWorkflowTransaction(root, async () => {
+    ensure(input.history !== true, 'role packets are available only for open work', 'HISTORY_READ_ONLY');
+    const file = await resolveWork(root, work);
+    const document = await readAt(file);
+    ensure(['active', 'paused', 'blocked'].includes(document.frontmatter.status), 'role packets are available only for open work', 'INVALID_TRANSITION');
+    return makePacket(document, input.assignment);
+  });
 }
 
 /**
@@ -366,30 +376,38 @@ function lightEntry(root, file, document, reason) {
 }
 
 /**
- * Searches semantic Work Item metadata and Material summaries without returning document bodies.
+ * Searches semantic Work Item metadata without returning document bodies.
  *
  * @param {{root: string, input: {query: string, limit?: number}}} args - Workspace root and bounded search input.
  * @returns {Promise<object[]>} Ranked lightweight matches, capped by the requested limit.
  */
 export async function findCommand({ root, input }) {
-  const query = scalar(input.query).trim().toLowerCase();
-  ensure(query, 'query is required', 'INVALID_INPUT');
-  const limit = Number(input.limit ?? 10);
-  ensure(Number.isInteger(limit) && limit >= 1 && limit <= 100, 'limit must be 1-100', 'INVALID_INPUT');
-  const matches = [];
-  for (const file of await listWork(root)) {
-    const document = await readAt(file);
-    const match = matchWork(document, query);
-    if (match) {
-      matches.push({
-        score: match.score,
-        entry: lightEntry(root, file, document, match.reason),
-      });
+  return withWorkflowTransaction(root, async () => {
+    const query = scalar(input.query).trim().toLowerCase();
+    ensure(query, 'query is required', 'INVALID_INPUT');
+    const limit = Number(input.limit ?? 10);
+    ensure(Number.isInteger(limit) && limit >= 1 && limit <= 100, 'limit must be 1-100', 'INVALID_INPUT');
+    const matches = [];
+    const history = input.history === true;
+    const sources = history
+      ? (await readHistoryIndex(root)).map((entry) => ({ file: path.resolve(root, entry.path), document: archivedDocument(entry) }))
+      : (await listWork(root)).map((file) => ({ file, document: null }));
+    for (const source of sources) {
+      const { file } = source;
+      const document = source.document ?? await readAt(file);
+      if (!history && !['active', 'paused', 'blocked'].includes(document.frontmatter.status)) continue;
+      const match = matchWork(document, query);
+      if (match) {
+        matches.push({
+          score: match.score,
+          entry: lightEntry(root, file, document, match.reason),
+        });
+      }
     }
-  }
-  matches.sort((left, right) => right.score - left.score
-    || left.entry.path.localeCompare(right.entry.path));
-  return matches.slice(0, limit).map(({ entry }) => entry);
+    matches.sort((left, right) => right.score - left.score
+      || left.entry.path.localeCompare(right.entry.path));
+    return matches.slice(0, limit).map(({ entry }) => entry);
+  });
 }
 
 /**
@@ -399,20 +417,28 @@ export async function findCommand({ root, input }) {
  * @returns {Promise<object[]>} Lightweight entries matching every supplied filter.
  */
 export async function listCommand({ root, input }) {
-  const output = [];
-  let parentFile = null;
-  if (input.parent) parentFile = await resolveWork(root, input.parent);
-  for (const file of await listWork(root)) {
-    const document = await readAt(file);
-    const frontmatter = document.frontmatter;
-    const actualParent = path.resolve(path.dirname(file), frontmatter.parent);
-    if (input.status && frontmatter.status !== input.status) continue;
-    if (input.type && frontmatter.type !== input.type) continue;
-    if (input.owner && frontmatter.owner !== input.owner) continue;
-    if (parentFile && actualParent !== parentFile) continue;
-    output.push(lightEntry(root, file, document, 'filter'));
-  }
-  return output;
+  return withWorkflowTransaction(root, async () => {
+    const output = [];
+    const history = input.history === true;
+    let parentFile = null;
+    if (input.parent && !history) parentFile = await resolveWork(root, input.parent);
+    const sources = history
+      ? (await readHistoryIndex(root)).map((entry) => ({ file: path.resolve(root, entry.path), document: archivedDocument(entry) }))
+      : (await listWork(root)).map((file) => ({ file, document: null }));
+    for (const source of sources) {
+      const { file } = source;
+      const document = source.document ?? await readAt(file);
+      const frontmatter = document.frontmatter;
+      if (!history && !['active', 'paused', 'blocked'].includes(frontmatter.status)) continue;
+      const actualParent = frontmatter.parent ? path.resolve(path.dirname(file), frontmatter.parent) : null;
+      if (input.status && frontmatter.status !== input.status) continue;
+      if (input.type && frontmatter.type !== input.type) continue;
+      if (input.owner && frontmatter.owner !== input.owner) continue;
+      if (parentFile && actualParent !== parentFile) continue;
+      output.push(lightEntry(root, file, document, 'filter'));
+    }
+    return output;
+  });
 }
 
 /**
@@ -422,8 +448,36 @@ export async function listCommand({ root, input }) {
  * @returns {Promise<object>} Minimal handoff containing current state and next action.
  */
 export async function handoffCommand({ root, work }) {
-  const file = await resolveWork(root, work);
-  return makeHandoff(await readAt(file), path.relative(root, file));
+  return withWorkflowTransaction(root, async () => {
+    const file = await resolveWork(root, work);
+    const document = await readAt(file);
+    ensure(['active', 'paused', 'blocked'].includes(document.frontmatter.status), 'handoff is available only for open work', 'INVALID_TRANSITION');
+    return makeHandoff(document, path.relative(root, file));
+  });
+}
+
+/**
+ * Builds an archived query model.
+ * @param {object} entry - Lightweight archive-index entry.
+ * @returns {object} Lightweight model.
+ */
+function archivedDocument(entry) {
+  return {
+    frontmatter: { id: entry.id, name: entry.name, summary: entry.summary, status: entry.status, owner: '', parent: '', keywords: [] },
+    blocks: { result: { summary: [] } },
+  };
+}
+
+/**
+ * Opens archived Markdown explicitly.
+ * @param {object} args - Root and work reference.
+ * @returns {Promise<object>} Archived document response.
+ */
+export async function historyCommand({ root, work }) {
+  return withWorkflowTransaction(root, async () => {
+    const file = await resolveHistory(root, work);
+    return { work: path.relative(root, file), markdown: await readArchivedMarkdown(root, file) };
+  });
 }
 
 /**
@@ -446,247 +500,47 @@ function validationError(errors, file, code, message) {
  * @returns {Promise<{valid: boolean, checked?: number, errors: object[]}>} Workspace validity, inspected count, and ordered diagnostics.
  */
 export async function validateWorkspace({ root }) {
-  // Cross-document ordering and topology belong to the workspace use case; the store
-  // deliberately guarantees atomicity only for one document at a time.
-  // One absolute boundary root keeps discovered and persisted topology keys comparable.
-  const workspaceRoot = path.resolve(root);
-  const errors = [];
-  const rootFile = workspaceIndex(workspaceRoot);
-  let rootDocument;
-  try {
-    rootDocument = await readAt(rootFile);
-  } catch (error) {
-    return {
-      valid: false,
-      errors: [{
-        file: path.relative(workspaceRoot, rootFile),
-        code: error.code ?? 'INVALID',
-        message: error.message,
-      }],
-    };
-  }
-  const files = await listWork(workspaceRoot);
-  const documents = new Map();
-  for (const file of files) {
-    try {
-      documents.set(file, await readAt(file));
-    } catch (error) {
-      validationError(
-        errors,
-        path.relative(workspaceRoot, file),
-        error.code ?? 'INVALID',
-        error.message,
-      );
+  return withWorkflowTransaction(root, async () => {
+    const workspaceRoot = path.resolve(root);
+    const errors = [];
+    const files = await listWork(workspaceRoot);
+    const documents = new Map();
+    for (const file of files) {
+      try { documents.set(file, await readAt(file)); }
+      catch (error) { validationError(errors, path.relative(workspaceRoot, file), error.code ?? 'INVALID', error.message); }
     }
-  }
-  const registeredTop = new Set(
-    rootDocument.blocks.work_items.map((entry) => path.resolve(workspaceRoot, entry.path)),
-  );
-  for (const [file, document] of documents) {
+    for (const [file, document] of documents) {
     const relative = path.relative(workspaceRoot, file);
-    const parentFile = path.resolve(path.dirname(file), document.frontmatter.parent);
-    const parentIsRoot = parentFile === rootFile;
-    if (!parentIsRoot && !documents.has(parentFile)) {
-      validationError(errors, relative, 'INVALID_PARENT', 'parent link does not resolve to a work item');
-    }
-    if (parentIsRoot
-      && ['active', 'paused'].includes(document.frontmatter.status)
-      && !registeredTop.has(file)) {
-      validationError(
-        errors,
-        relative,
-        'ORPHAN_WORK',
-        'active or paused top-level work is not registered in workspace index',
-      );
-    }
-    if (parentIsRoot
-      && !['active', 'paused'].includes(document.frontmatter.status)
-      && registeredTop.has(file)) {
-      validationError(
-        errors,
-        relative,
-        'STALE_ROOT_LINK',
-        'workspace index may list only active or paused work',
-      );
-    }
-    if (!parentIsRoot && documents.has(parentFile)) {
+    const parentFile = document.state.parent ? path.resolve(path.dirname(file), document.state.parent) : null;
+    if (parentFile) {
       const parent = documents.get(parentFile);
-      const linked = parent.blocks.children
-        .some((entry) => path.resolve(workspaceRoot, entry.path) === file);
-      if (!linked) validationError(errors, relative, 'ORPHAN_CHILD', 'child is not registered by parent');
+      if (!parent) validationError(errors, relative, 'INVALID_PARENT', 'parent link does not resolve to open work');
+      else if (!parent.state.children.some((entry) => path.resolve(workspaceRoot, entry.path) === file && entry.id === document.state.id)) {
+        validationError(errors, relative, 'ORPHAN_CHILD', 'child is not registered by parent');
+      }
+    } else if (path.dirname(path.dirname(file)) !== path.join(workspaceRoot, '.agent-work', 'open')) {
+      validationError(errors, relative, 'INVALID_PARENT', 'nested work requires a parent link');
     }
-    for (const assignment of document.blocks.assignments) {
-      const accidental = [
-        path.join(path.dirname(file), assignment.id, 'index.md'),
-        path.join(path.dirname(file), 'children', assignment.id, 'index.md'),
-      ];
-      if ((await Promise.all(accidental.map(exists))).some(Boolean)) {
-        validationError(
-          errors,
-          relative,
-          'ASSIGNMENT_DIRECTORY',
-          `assignment ${assignment.id} has a forbidden task directory`,
-        );
+    for (const child of document.state.children) {
+      const childFile = path.resolve(workspaceRoot, child.path);
+      const linked = documents.get(childFile);
+      if (!childFile.startsWith(`${workspaceRoot}${path.sep}`) || !linked || linked.state.parent === null || path.resolve(path.dirname(childFile), linked.state.parent) !== file) {
+        validationError(errors, relative, 'INVALID_CHILD_LINK', `child link is not reciprocal: ${child.path}`);
       }
     }
-    const developmentAssignments = document.blocks.assignments
-      .filter((assignment) => assignment.role === 'development');
-    for (const vote of document.blocks.verification.votes.development) {
-      const assignment = developmentAssignments
-        .find((candidate) => candidate.id === vote.assignment);
-      if (!assignment
-        || assignment.status !== 'completed'
-        || assignment.result?.status !== 'completed') {
-        validationError(
-          errors,
-          relative,
-          'INVALID_DEVELOPMENT_VOTE',
-          `development vote ${vote.assignment} lacks a completed Development result`,
-        );
-        continue;
-      }
-      const expected = { assignment: assignment.id, ...resultVote(assignment.result) };
-      if (JSON.stringify(expected) !== JSON.stringify(vote)) {
-        validationError(
-          errors,
-          relative,
-          'INVALID_DEVELOPMENT_VOTE',
-          `development vote ${vote.assignment} does not match its completed result`,
-        );
-      }
+    for (const assignment of document.state.assignments) {
+      for (const accidental of [
+        path.join(path.dirname(file), assignment.id, 'work.md'),
+        path.join(path.dirname(file), 'children', assignment.id, 'work.md'),
+      ]) if (await exists(accidental)) validationError(errors, relative, 'ASSIGNMENT_DIRECTORY', `assignment ${assignment.id} has a forbidden work directory`);
     }
-    const completedDevelopment = developmentAssignments.filter((candidate) => candidate.status === 'completed'
-      && candidate.result?.status === 'completed');
-    for (const assignment of completedDevelopment) {
-      if (!document.blocks.verification.votes.development
-        .some((vote) => vote.assignment === assignment.id)) {
-        validationError(
-          errors,
-          relative,
-          'MISSING_DEVELOPMENT_VOTE',
-          `completed Development result ${assignment.id} has no projected vote`,
-        );
-      }
+    if (document.state.status === 'completed' && !document.state.parent) {
+      validationError(errors, relative, 'UNARCHIVED_COMPLETION', 'completed top-level work must be archived');
     }
-    for (const childEntry of document.blocks.children) {
-      const linkedFile = path.resolve(workspaceRoot, childEntry.path);
-      if (!linkedFile.startsWith(`${workspaceRoot}${path.sep}`)) {
-        validationError(
-          errors,
-          relative,
-          'INVALID_CHILD_LINK',
-          `child path escapes the project: ${childEntry.path}`,
-        );
-        continue;
-      }
-      const linkedDocument = documents.get(linkedFile);
-      if (!linkedDocument) {
-        validationError(
-          errors,
-          relative,
-          'BROKEN_CHILD_LINK',
-          `missing child work: ${childEntry.path}`,
-        );
-      } else if (linkedDocument.frontmatter.id !== childEntry.id
-        || path.resolve(path.dirname(linkedFile), linkedDocument.frontmatter.parent) !== file) {
-        validationError(
-          errors,
-          relative,
-          'INVALID_CHILD_LINK',
-          `child link is not reciprocal: ${childEntry.path}`,
-        );
-      }
+    for (const issue of document.state.status === 'completed' ? completionIssues(document) : []) {
+      validationError(errors, relative, issue.code, issue.message);
     }
-    for (const material of document.blocks.materials) {
-      try {
-        normalizedMaterialPath(material.role, material.path);
-      } catch {
-        validationError(
-          errors,
-          relative,
-          'MATERIAL_SCOPE',
-          `material path is outside role scope: ${material.path}`,
-        );
-      }
     }
-    for (const dimension of ['test', 'review']) {
-      if (document.blocks.verification.decisions?.[dimension]) {
-        try {
-          const calculated = computeVotes(document.blocks.verification, dimension, {
-            developmentOccurred: developmentAssignments.length > 0,
-          });
-          if (JSON.stringify(calculated)
-            !== JSON.stringify(document.blocks.verification.decisions[dimension])) {
-            validationError(
-              errors,
-              relative,
-              'INVALID_VOTE_DECISION',
-              `${dimension} decision does not match votes`,
-            );
-          }
-        } catch (error) {
-          validationError(errors, relative, 'INVALID_VOTE_DECISION', error.message);
-        }
-      }
-    }
-    if (document.frontmatter.status === 'completed') {
-      for (const issue of completionIssues(document)) {
-        validationError(errors, relative, issue.code, issue.message);
-      }
-    }
-  }
-  for (const [file, document] of documents) {
-    if (document.frontmatter.status !== 'completed') continue;
-    const prefix = `${path.dirname(file)}${path.sep}children${path.sep}`;
-    for (const [candidate, child] of documents) {
-      if (candidate.startsWith(prefix)
-        && !['completed', 'cancelled'].includes(child.frontmatter.status)) {
-        validationError(
-          errors,
-          path.relative(workspaceRoot, file),
-          'INCOMPLETE_DESCENDANT',
-          `completed work has unfinished descendant ${child.frontmatter.id}`,
-        );
-      }
-    }
-  }
-  for (const entry of rootDocument.blocks.work_items) {
-    const linkedFile = path.resolve(workspaceRoot, entry.path);
-    const linkedDocument = documents.get(linkedFile);
-    if (!linkedDocument) {
-      validationError(
-        errors,
-        path.relative(workspaceRoot, rootFile),
-        'BROKEN_ROOT_LINK',
-        `missing top-level work: ${entry.path}`,
-      );
-      continue;
-    }
-    // A root projection is reciprocal only when the referenced Work Item points back to the workspace.
-    const linkedParent = path.resolve(
-      path.dirname(linkedFile),
-      linkedDocument.frontmatter.parent,
-    );
-    if (linkedParent !== rootFile) {
-      validationError(
-        errors,
-        path.relative(workspaceRoot, rootFile),
-        'INVALID_ROOT_LINK',
-        `root entry references non-top-level work: ${entry.path}`,
-      );
-      continue;
-    }
-    const expected = rootEntry(linkedFile, workspaceRoot, linkedDocument);
-    for (const field of ['id', 'path', 'name', 'summary', 'status']) {
-      if (entry[field] !== expected[field]) {
-        validationError(
-          errors,
-          path.relative(workspaceRoot, rootFile),
-          'STALE_ROOT_PROJECTION',
-          `root work item ${entry.id} ${field} does not match ${expected[field]}`,
-        );
-      }
-    }
-  }
-  return { valid: errors.length === 0, checked: documents.size, errors };
+    return { valid: errors.length === 0, checked: documents.size, errors };
+  });
 }

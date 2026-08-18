@@ -6,6 +6,9 @@ Notable changes are recorded chronologically. Updates replace the current workfl
 
 ### Changed
 
+- Replaced JSON-in-Markdown Work Item indexes with one plain `work.md` per Main-owned Work Item and a disposable sibling `state.json` for operational coordination.
+- Made Child Main documents independently owned, limited parent projection to child contract and result facts, and retained completed `work.md` trees in an archive excluded from normal Agent discovery and resume context.
+- Removed task-local role materials, persisted role results, and hand-maintained Assignment histories; Architecture, Test, and Review now return concise transient messages while durable engineering facts live in authoritative project artifacts.
 - Modularized the workflow runtime into cohesive document, store, model, verification, application, and CLI modules.
 - Removed obsolete format fields, dated module names, and old-format handling.
 - Extended package and install checks across the complete transitive module graph and installed public CLI.

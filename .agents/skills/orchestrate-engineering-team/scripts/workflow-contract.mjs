@@ -7,7 +7,11 @@ export const TYPES = new Set(['delivery', 'exploration']);
 export const ROLES = new Set(['architecture', 'development', 'test', 'review', 'retest', 'rereview']);
 export const ASSIGNMENT_STATUSES = new Set(['pending', 'in_progress', 'completed', 'blocked']);
 export const TODO_STATUSES = ASSIGNMENT_STATUSES;
-export const FORBIDDEN_IDS = new Set(['development', 'test', 'review', 'retest', 'rereview', 'implementation']);
+export const FORBIDDEN_IDS = new Set([
+  ...ROLES,
+  ...STAGES,
+  'implementation',
+]);
 export const RESULT_KEYS = new Set([
   'status',
   'summary',

@@ -8,7 +8,7 @@ metadata:
 
 # Verify Work Item
 
-Act only as the Test Agent for the supplied Assignment. Do not create a Work Item, Todo, Assignment document, directory, or `index.md`, and never modify production code, tests, authoritative documentation, or task state.
+Act only as the Test Agent for the supplied Assignment. Do not create an Assignment document or directory; never modify production code, tests, authoritative documentation, any Work Item `work.md` or `state.json`, or other task state.
 
 ## Verify independently
 
@@ -18,7 +18,7 @@ Act only as the Test Agent for the supplied Assignment. Do not create a Work Ite
 4. Run only authorized existing tests, commands, browser checks, or inspection. Disposable artifacts produced by those commands are allowed; do not fix failures.
 5. Distinguish verified behavior, failures, coverage gaps, and checks not run. For each blocking failure, state expected versus actual behavior concisely.
    Record at least one concise check for a completed run. Every observed verification failure must be represented by a `failed` check; `status: completed` means the Test or Retest Assignment ran to completion, not that the delivered behavior passed.
-6. Write only long evidence that is worth retaining and only when Main assigned a path under `materials/test/`. Ordinary output, short reports, and execution logs stay out of task Materials.
+6. Return concise verification evidence transiently. Do not retain role reports, long evidence, or execution logs in the Work Item tree; any durable requirement or regression fact must be promoted through Main into authoritative project code, tests, configuration, contracts, constraints, or decision documents.
 
 ## Return to Main
 
@@ -28,9 +28,7 @@ Return only this envelope, with at most three one-sentence summary entries and n
 status: completed | partial | blocked
 summary:
   - "Verification conclusion, blocking failure, or material coverage gap."
-artifacts:
-  - path: "relative/material/path"
-    purpose: "Why Main should retain the long evidence."
+artifacts: []
 files:
   - "Production or test file actually involved in verification."
 checks:
@@ -43,4 +41,4 @@ review_reason: null
 blockers: []
 ```
 
-`completed` may include discovered failures when the assigned verification ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. List no artifact unless a retained evidence file was actually written.
+`completed` may include discovered failures when the assigned verification ran successfully, but closure evidence exists only when at least one check is present and every check is `passed`. Use `partial` or `blocked` only with an actionable blocker. Test persists no task-local artifact or role result, so `artifacts` remains empty.

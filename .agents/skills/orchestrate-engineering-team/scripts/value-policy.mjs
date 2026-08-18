@@ -58,35 +58,6 @@ export function normalizedScope(scope) {
   return normalized;
 }
 
-const MATERIAL_FOLDER_BY_ROLE = Object.freeze({
-  architecture: 'architecture',
-  test: 'test',
-  retest: 'test',
-  review: 'review',
-  rereview: 'review',
-});
-
-/**
- * Validates that a Material path belongs to the directory assigned to its producing role.
- *
- * @param {string} role - Architecture, Test, Retest, Review, or Rereview role identifier.
- * @param {unknown} materialPath - Project-relative Material path supplied by the role.
- * @returns {string} The canonical role-scoped Material path.
- */
-export function normalizedMaterialPath(role, materialPath) {
-  const folder = Object.hasOwn(MATERIAL_FOLDER_BY_ROLE, role)
-    ? MATERIAL_FOLDER_BY_ROLE[role]
-    : undefined;
-  ensure(folder, 'role may not register materials', 'MATERIAL_SCOPE');
-  const normalized = normalizedScope(materialPath);
-  ensure(
-    normalized.startsWith(`materials/${folder}/`),
-    `material path must be below materials/${folder}/`,
-    'MATERIAL_SCOPE',
-  );
-  return normalized;
-}
-
 /**
  * Requires a non-empty string whose length does not exceed a field-specific limit.
  *

@@ -1,161 +1,109 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { completionIssues, computeVotes, hasCompletedEvidence } from '../../.agents/skills/orchestrate-engineering-team/scripts/verification.mjs';
 
-import { newWorkDocument } from '../../.agents/skills/orchestrate-engineering-team/scripts/workflow-document.mjs';
-import {
-  completionIssues,
-  computeVotes,
-  hasCompletedEvidence,
-  validateRoleResult,
-} from '../../.agents/skills/orchestrate-engineering-team/scripts/verification.mjs';
-
-function developmentResult(overrides = {}) {
-  return {
-    status: 'completed',
-    summary: ['Implemented the runtime seam.'],
-    artifacts: [],
-    files: ['src/runtime.mjs'],
-    checks: [{ command: 'node --test', result: 'passed' }],
-    requires_test: true,
-    test_reason: 'Runtime behavior is executable.',
-    requires_review: true,
-    review_reason: 'State semantics need review.',
-    blockers: [],
-    ...overrides,
-  };
-}
-
-test('verification interface enforces the exact role-result envelope', () => {
-  assert.equal(validateRoleResult(developmentResult(), 'development').status, 'completed');
-  assert.throws(
-    () => validateRoleResult({ ...developmentResult(), log: 'not allowed' }, 'development'),
-    (error) => error.code === 'INVALID_RESULT'
-      && error.message === 'result fields must exactly match the role result protocol',
-  );
-  assert.throws(
-    () => validateRoleResult(developmentResult({ status: 'blocked' }), 'development'),
-    /partial and blocked results require blockers/,
-  );
-});
-
-test('verification interface preserves Development OR and the three-party waiver rule', () => {
-  const verification = {
-    votes: {
-      architecture: {
-        covered: true,
-        test: { requires: false },
-        review: { requires: false },
-      },
-      development: [
-        { assignment: 'dev-a', test: { requires: false }, review: { requires: false } },
-        { assignment: 'dev-b', test: { requires: true }, review: { requires: false } },
-      ],
-      main: {
-        test: { requires: false, reason: 'Waive test.' },
-        review: { requires: true, reason: 'Run review.' },
-      },
-    },
-    decisions: {},
-  };
-  assert.deepEqual(computeVotes(verification, 'test').votes, {
-    architecture: false,
-    development: true,
-    main: false,
-  });
-  assert.equal(computeVotes(verification, 'test').execute, false);
+test('gate interface defaults to execution unless supported votes waive it', () => {
+  const verification = { votes: { architecture: null, development: [], main: { test: { requires: true, reason: 'Run it.' }, review: { requires: false, reason: 'No review.' } } } };
+  assert.equal(computeVotes(verification, 'test').execute, true);
   assert.equal(computeVotes(verification, 'review').execute, false);
-  verification.votes.architecture.covered = false;
-  assert.equal(computeVotes(verification, 'test').rule, 'main-decision-with-development-advice');
-  assert.equal(computeVotes(verification, 'test').execute, false);
-  verification.votes.development = [];
-  assert.equal(
-    computeVotes(verification, 'test', { developmentOccurred: true }).execute,
-    true,
-  );
-  assert.match(
-    computeVotes(verification, 'test', { developmentOccurred: true }).reason,
-    /Development evidence is missing/,
-  );
 });
 
-test('verification completion policy requires current passed evidence for executed dimensions', () => {
-  const work = newWorkDocument({
-    id: 'verified-work',
-    name: 'Verified work',
-    summary: 'Exercises completion evidence policy directly.',
-    keywords: ['verification', 'completion', 'evidence'],
-    type: 'delivery',
-    goal: 'Require executed verification evidence.',
-    successCriteria: ['Verification evidence is complete.'],
-  }, '../../../index.md', new Date('2026-07-28T01:00:00.000Z'));
-  work.blocks.todo[0].status = 'completed';
-  work.blocks.result = {
-    status: 'completed',
-    summary: ['Verification completed.'],
-    artifacts: [],
-    success_evidence: [{
-      criterion: 'Verification evidence is complete.',
-      evidence: 'The direct policy check passed.',
-      pointers: [],
-    }],
-    blockers: [],
-    next_action: '',
-  };
-  const development = {
-    id: 'dev-verification',
-    role: 'development',
-    status: 'completed',
-    objective: 'Implement verified behavior.',
-    write: ['src/verified.mjs'],
-    result: developmentResult(),
-    blockers: [],
-  };
-  const completedVerifier = (id, role) => ({
-    id,
-    role,
-    status: 'completed',
-    objective: `Execute ${role}.`,
-    write: [],
-    blockers: [],
-    result: {
-      status: 'completed',
-      summary: [`${role} passed.`],
-      artifacts: [],
-      files: [],
-      checks: [{ command: `${role} check`, result: 'passed' }],
-      requires_test: null,
-      test_reason: null,
-      requires_review: null,
-      review_reason: null,
-      blockers: [],
+test('verification freshness follows dimension-specific finding routes and explicit shared-surface votes', () => {
+  const receipt = (completedOrder, extra = {}) => ({ status: 'completed', completed_order: completedOrder, ...extra });
+  const development = (id, completedOrder, dependsOn = [], votes = { test: { requires: true }, review: { requires: true } }) => ({
+    id, role: 'development', status: 'completed', write: ['src/a.mjs'],
+    dependsOn, receipt: receipt(completedOrder, { changed_surface: ['src/a.mjs'], votes }), blockers: [],
+  });
+  const verifier = (id, role, completedOrder, dependsOn = []) => ({
+    id, role, status: 'completed', write: [], dependsOn, receipt: receipt(completedOrder, { passed: true }), blockers: [],
+  });
+  const makeDocument = (fix) => {
+    const assignments = [
+      development('initial-development', 1),
+      verifier('initial-test', 'test', 2, ['initial-development']),
+      verifier('initial-review', 'review', 3, ['initial-development']),
+      fix,
+    ];
+    const document = {
+    blocks: {
+      todo: [{ id: 'done', status: 'completed', blockers: [] }],
+      assignments,
+      success_criteria: ['Verified.'],
+      result: { status: 'completed', summary: ['Done.'], blockers: [], success_evidence: [{ criterion: 'Verified.', evidence: 'Checked.' }] },
+      verification: {
+        votes: {
+          architecture: null,
+          development: [
+            { assignment: 'initial-development', test: { requires: true }, review: { requires: true } },
+            { assignment: fix.id, ...fix.receipt.votes },
+          ],
+          main: { test: { requires: true, reason: 'Test.' }, review: { requires: true, reason: 'Review.' } },
+        },
+        decisions: { test: null, review: null },
+      },
     },
-  });
-  work.blocks.assignments.push(
-    development,
-    completedVerifier('test-verification', 'test'),
-    completedVerifier('review-verification', 'review'),
-  );
-  work.blocks.verification.votes.development.push({
-    assignment: development.id,
-    test: { requires: true, reason: development.result.test_reason },
-    review: { requires: true, reason: development.result.review_reason },
-  });
-  work.blocks.verification.votes.main = {
-    test: { requires: true, reason: 'Execute tests.' },
-    review: { requires: true, reason: 'Execute review.' },
   };
-  work.blocks.verification.decisions.test = computeVotes(work.blocks.verification, 'test');
-  work.blocks.verification.decisions.review = computeVotes(work.blocks.verification, 'review');
+    document.blocks.verification.decisions.test = computeVotes(document.blocks.verification, 'test');
+    document.blocks.verification.decisions.review = computeVotes(document.blocks.verification, 'review');
+    return document;
+  };
 
-  assert.equal(hasCompletedEvidence(work, 'test'), true);
-  assert.equal(hasCompletedEvidence(work, 'review'), true);
-  assert.deepEqual(completionIssues(work), []);
+  const testFix = makeDocument(development('test-fix', 4, ['initial-test'], {
+    test: { requires: true }, review: { requires: false },
+  }));
+  assert.equal(hasCompletedEvidence(testFix, 'test'), false);
+  assert.equal(hasCompletedEvidence(testFix, 'review'), true);
+  testFix.blocks.assignments.push(verifier('fresh-retest', 'retest', 5, ['test-fix']));
+  assert.equal(hasCompletedEvidence(testFix, 'test'), true);
+  assert.equal(hasCompletedEvidence(testFix, 'review'), true);
 
-  work.blocks.assignments.find(({ role }) => role === 'test')
-    .result.checks.push({ command: 'unexecuted test', result: 'not_run' });
-  assert.equal(hasCompletedEvidence(work, 'test'), false);
-  assert.ok(completionIssues(work).some(
-    (issue) => issue.code === 'MISSING_VERIFICATION_EVIDENCE'
-      && issue.message.startsWith('test execution requires'),
-  ));
+  const reviewFix = makeDocument(development('review-fix', 4, ['initial-review'], {
+    test: { requires: false }, review: { requires: true },
+  }));
+  assert.equal(hasCompletedEvidence(reviewFix, 'test'), true);
+  assert.equal(hasCompletedEvidence(reviewFix, 'review'), false);
+  reviewFix.blocks.assignments.push(verifier('fresh-rereview', 'rereview', 5, ['review-fix']));
+  assert.equal(hasCompletedEvidence(reviewFix, 'test'), true);
+  assert.equal(hasCompletedEvidence(reviewFix, 'review'), true);
+
+  const testOriginSharedFix = makeDocument(development('test-origin-shared-fix', 4, ['initial-test'], {
+    test: { requires: true }, review: { requires: true },
+  }));
+  assert.equal(hasCompletedEvidence(testOriginSharedFix, 'test'), false);
+  assert.equal(hasCompletedEvidence(testOriginSharedFix, 'review'), false);
+  testOriginSharedFix.blocks.assignments.push(
+    verifier('test-origin-shared-retest', 'retest', 5, ['test-origin-shared-fix']),
+    verifier('test-origin-shared-rereview', 'rereview', 6, ['test-origin-shared-fix']),
+  );
+  assert.equal(hasCompletedEvidence(testOriginSharedFix, 'test'), true);
+  assert.equal(hasCompletedEvidence(testOriginSharedFix, 'review'), true);
+
+  const reviewOriginSharedFix = makeDocument(development('review-origin-shared-fix', 4, ['initial-review'], {
+    test: { requires: true }, review: { requires: true },
+  }));
+  assert.equal(hasCompletedEvidence(reviewOriginSharedFix, 'test'), false);
+  assert.equal(hasCompletedEvidence(reviewOriginSharedFix, 'review'), false);
+  reviewOriginSharedFix.blocks.assignments.push(
+    verifier('review-origin-shared-retest', 'retest', 5, ['review-origin-shared-fix']),
+    verifier('review-origin-shared-rereview', 'rereview', 6, ['review-origin-shared-fix']),
+  );
+  assert.equal(hasCompletedEvidence(reviewOriginSharedFix, 'test'), true);
+  assert.equal(hasCompletedEvidence(reviewOriginSharedFix, 'review'), true);
+
+  const sharedFix = makeDocument(development('shared-fix', 4));
+  assert.equal(hasCompletedEvidence(sharedFix, 'test'), false);
+  assert.equal(hasCompletedEvidence(sharedFix, 'review'), false);
+  sharedFix.blocks.assignments.push(
+    verifier('shared-retest', 'retest', 5, ['shared-fix']),
+    verifier('shared-rereview', 'rereview', 6, ['shared-fix']),
+  );
+  assert.equal(hasCompletedEvidence(sharedFix, 'test'), true);
+  assert.equal(hasCompletedEvidence(sharedFix, 'review'), true);
+  assert.deepEqual(completionIssues(sharedFix), []);
+
+  const ambiguous = makeDocument(development('ambiguous-fix', 4, [], {
+    test: { requires: false }, review: { requires: false },
+  }));
+  assert.equal(hasCompletedEvidence(ambiguous, 'test'), false);
+  assert.equal(hasCompletedEvidence(ambiguous, 'review'), false);
 });

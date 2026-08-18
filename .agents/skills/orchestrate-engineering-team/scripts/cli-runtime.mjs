@@ -11,9 +11,9 @@ import {
   decisionCommand,
   findCommand,
   handoffCommand,
+  historyCommand,
   initWorkspace,
   listCommand,
-  materialCommand,
   packetCommand,
   releaseWork,
   resultCommand,
@@ -155,11 +155,11 @@ export async function runCli(argv, { stdin = process.stdin, now = new Date() } =
     });
   }
   if (command === 'child' && action === 'sync') return childSync(common);
-  if (command === 'material') return materialCommand({ ...common, action });
   if (command === 'packet') return packetCommand(common);
   if (command === 'find') return findCommand({ root, input });
   if (command === 'list') return listCommand({ root, input });
   if (command === 'handoff') return handoffCommand(common);
+  if (command === 'history') return historyCommand(common);
   if (command === 'validate') return validateWorkspace({ root });
   fail(`unknown command: ${[command, action].filter(Boolean).join(' ')}`, 'INVALID_COMMAND');
 }

@@ -1,55 +1,24 @@
 # Contributing
 
-Thank you for improving `orchestrate-engineering-team`. Bug fixes, clearer instructions, tests, and focused workflow improvements are welcome.
-
-## Development setup
-
-Use Node.js 22 and the pinned pnpm release:
+Use Node.js 22 and pnpm 10.13.1. Run:
 
 ```bash
-corepack enable
-corepack prepare pnpm@10.13.1 --activate
 pnpm install --frozen-lockfile
 pnpm verify
+git diff --check
 ```
 
-The repository currently has no third-party runtime dependencies. Validation uses a pinned development dependency and lockfile. `package.json` remains private because the open Skill suite is distributed from GitHub and this project must not be published to npm; the README's `npx` command runs the external `skills@1.5.19` installer.
+## Architecture invariants
 
-## Repository contracts
+- `.agents/skills/` contains exactly one public Skill: `orchestrate-engineering-team`.
+- The four stable roles live only in `references/role-contracts.yaml`; do not recreate public Role Skills or compatibility shims.
+- Role Contracts own authority and independence. Configuration and Adapters may narrow but never expand them.
+- Keep configuration and Adapter contract packages host-neutral. Concrete host support belongs in independently trusted adapter packages.
+- Main uses host-native subagents and has no `.agent-work`, lifecycle state machine, workflow runtime, leases, receipts, or voting.
+- No dispatch/configuration path automatically installs or executes a package, plugin, extension, MCP server, or Adapter.
 
-- Keep `.agents/skills/` canonical. Do not duplicate the Skill directories under another packaging path.
-- Treat the project-local five-Skill GitHub installation as the primary distribution contract. Keep the installer pinned and preserve its non-interactive `--skill '*' --agent codex --yes` semantics in documentation and CI.
-- Every `SKILL.md` must use only current Agent Skills frontmatter fields and must retain `license: MIT`. `name`, length, type, and metadata constraints are enforced by the checker.
-- Describe Codex/native-subagent runtime requirements accurately.
-- Keep internal Architecture, Development, Test, and Review Skills explicitly invoked with `policy.allow_implicit_invocation: false`. The Main Skill remains implicitly invocable.
-- Treat `references/agent-profiles.yaml` as advisory. Do not describe its capability lists, write scopes, or Main-only document/state rule as enforced isolation.
-- Preserve the workflow domain boundary: each Main-owned Work Item has one semantic plain-Markdown `work.md` and, only while open, one disposable sibling `state.json`; role executions are transient Assignments without documents or directories; only independently acceptable, recursively coordinated subgoals become Child Work Items.
-- Every normal role and Child Main dispatch must explicitly set `fork_turns: "none"`. Task packets must remain minimal and every role return must use the compact role envelope (`status`, at most three `summary` entries, `artifacts`, `files`, `checks`, separate Test/Review votes and reasons, and `blockers`).
-- Keep role returns transient and keep task-local materials, raw role envelopes, execution logs, and hand-maintained Assignment histories out of Work Item trees. Promote durable facts to authoritative project code, tests, configuration, contracts, constraints, or decision documents.
-- Preserve child ownership and archive behavior: parent documents project only child contract, link, acceptance, result, and artifacts; completed `work.md` trees remain user-readable while runtime `state.json` is removed and default Agent context excludes archives.
-- Keep the Main Skill resources at `assets/role-task-packet.md`, `references/{agent-profiles.yaml,state-and-voting.md}`, and `scripts/{workflow,workflow-core}.mjs`. Renames must update the checker, copied-package check, installer smoke, and public documentation together.
-- Keep the bundled workflow runtime dependency-free: its entry and local modules may import only Node.js built-ins or other bundled relative workflow modules. The repository's locked dev-only YAML dependency is allowed for validation, but do not add a `dependencies` block to `package.json`.
-- Keep the Codex Plugin and marketplace files optional. Their paths must remain relative to the Plugin/marketplace root and begin with `./`; they must point to the canonical Skill suite rather than become a required or duplicate distribution path.
-- Do not commit project-specific `.agent-work/`, credentials, caches, or generated dependency directories.
+## Changes
 
-## Tests
+Update tests for role contract/schema behavior, merge precedence, required/optional capabilities, material path safety, Adapter conformance, CLI exit codes, and single-Skill install/release shape. Keep generated or local configuration out of commits unless it is an intentional fixture.
 
-Run `pnpm verify` before opening a pull request. It covers:
-
-- Agent Skills frontmatter and Codex UI metadata;
-- role registry, advisory capabilities, paths, and return contracts;
-- explicit empty-history dispatch, Main-only Work Item document/state ownership, role state-write prohibitions, and context-safe archive exclusion;
-- parser error handling and fail-closed schemas;
-- a temporary copied-package structural smoke check of the canonical Skills, templates, references, built-in-only workflow runtime, and optional Plugin adapter.
-
-Use [docs/acceptance-report.md](docs/acceptance-report.md) for C01-C20 release evidence. Keep a criterion `pending` until its named deterministic check or forward multi-agent scenario has actually run; static wording or an implementation diff is not behavioral proof.
-
-When changing validation behavior, add a success case and a precise failure case. When changing packaging, extend the copied-package check rather than validating only the source tree.
-
-GitHub Actions separately runs `pnpm smoke:skill-install`: it uses the pinned external installer to install all five Skills from an isolated local source Git repository into a clean temporary target Git repository, deliberately alters one installed file, refreshes the suite by re-running the same install command, and removes the five named Skills. The check requires valid Skills/resources after install and observable refresh, absent Skill directories plus the documented five retained `skills-lock.json` entries after removal, an unchanged source worktree, isolated child user/global state, and full temporary cleanup. This networked lifecycle is the primary distribution check and must not join no-network `pnpm verify`. A later, separate job exercises the optional Plugin marketplace add, Plugin add, native Skill discovery, list, remove, and marketplace removal with the pinned supported Codex CLI and an isolated configuration.
-
-## Pull requests
-
-Keep pull requests focused and explain the user-visible behavior, runtime impact, and verification performed. Update `CHANGELOG.md` for notable changes. Use an issue first when a change would add a new runtime adapter, alter role authority, or change the confirmed workflow model.
-
-By contributing, you agree that your contribution is licensed under the repository's MIT License.
+For security-sensitive changes, distinguish advisory prompt restrictions from effective host sandbox/tool enforcement and avoid recording secrets or hidden reasoning.

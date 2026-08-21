@@ -1,0 +1,11 @@
+{
+  "name": "@orchestrate-engineering-team/adapter-contract",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Host adapter protocol and conformance helpers for orchestrate-engineering-team",
+  "license": "MIT",
+  "types": "./src/index.d.ts",
+  "exports": { ".": { "types": "./src/index.d.ts", "import": "./src/index.js" } },
+  "files": ["src", "fixtures", "README.md"],
+  "engines": { "node": ">=22 <23" }
+}

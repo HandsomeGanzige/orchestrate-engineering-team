@@ -1,7 +1,7 @@
 interface:
   display_name: "Engineering Team Orchestrator"
-  short_description: "Coordinate governed v0.3.0 engineering Work Items"
-  default_prompt: "Use $orchestrate-engineering-team v0.3.0 with its eight intent commands, immutable v2 contract, Main-owned work.md, and separate operational state."
+  short_description: "Resolve internal roles and configured capabilities"
+  default_prompt: "Use $orchestrate-engineering-team to decide whether specialist context adds value, resolve the appropriate canonical role and configured capabilities, and coordinate through host-native subagents."
 
 policy:
   allow_implicit_invocation: true

@@ -1,0 +1,9 @@
+{
+  "context": { "host": "fake" },
+  "binding": { "agent": "team-development" },
+  "request": {
+    "role": "development",
+    "contract": { "capabilities": { "prohibited": ["user-decision"] } }
+  },
+  "expectedMode": "native"
+}

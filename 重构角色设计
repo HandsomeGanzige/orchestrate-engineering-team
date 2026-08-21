@@ -1,0 +1,354 @@
+# 单一 Main Skill 与可配置领域 Agent 能力注入方案
+
+## 摘要
+
+将产品从“五个公开 Skill”直接重构为“一个公开 Main Skill”。Architecture、Development、Product Test、Review 不再由独立 Skill 表示，而由 Main 内部的 canonical Role Contract 定义；用户通过个人、项目和项目本地配置，为每个角色追加专业 Skill、材料和宿主绑定。Main 在每次派发时解析 `Resolved Role`，优先使用宿主原生能力，不能原生注入时回退到紧凑角色 Prompt，并如实报告限制。
+
+核心不假设 Pi、Claude Code、Codex 或 Gemini。宿主能力通过 Adapter Contract 接入；首版只定义并验证协议，不发布具体宿主适配器。Pi 等适配器未来作为额外 package/子包提供。
+
+本次不考虑向后兼容：直接移除四个 Role Skill，不保留 deprecated shim。
+
+## 产品模型与公共接口
+
+### 唯一公开 Skill
+
+仅发布：
+
+```text
+orchestrate-engineering-team
+```
+
+其公共职责是：
+
+- 判断是否需要 specialist；
+- 选择稳定角色 ID；
+- 解析个人/项目能力偏好；
+- 构造并派发 `Resolved Role`；
+- 使用宿主原生 subagent 机制；
+- 综合结果并处理用户决策。
+
+稳定角色 ID 保留为：
+
+```text
+architecture
+development
+product-test
+review
+```
+
+### 内部 Role Contract
+
+Role Contract 是 Main Skill 内部 Module，不参与 Skill discovery。每个角色由两部分构成：
+
+1. 结构化契约：route condition、authority、required/prohibited capabilities、context、returns、independence；
+2. 紧凑 Prompt fragment：表达难以结构化的判断原则。
+
+Role Contract 是不可变权限上限。用户配置只能补充专业能力、材料、宿主绑定或进一步缩小权限，不能删除角色独立性、扩大决策权或覆盖 Main 的最终协调权。
+
+### 专业能力与分发来源分离
+
+- Skill：可移植的专业知识、流程、参考资料和脚本；
+- Material：项目文件或参考资料，按需读取；
+- Package/plugin：安装和分发来源，不等于 per-agent 能力集；
+- Native Agent：宿主 Adapter，负责模型、工具、MCP、extension、sandbox、worktree；
+- Role Contract：跨宿主角色语义源。
+
+Main 不在 dispatch 时自动安装 package、启用未知 MCP 或信任 executable source。Package requirement 只用于 setup/availability assertion；真正注入的是它提供的 Skill、extension、MCP 或 native Agent。
+
+## 配置接口
+
+### 配置位置与优先级
+
+使用宿主中立的 `.agents` 命名，不默认 Pi：
+
+1. 用户全局：`~/.agents/orchestrate-engineering-team.yaml`
+2. 项目提交：`.agents/orchestrate-engineering-team.yaml`
+3. 项目本地：`.agents/orchestrate-engineering-team.local.yaml`
+4. 本次任务显式追加：仅本次 dispatch 生效，不持久化
+
+合并优先级：
+
+```text
+canonical Role Contract
+< user
+< project
+< project-local
+< task additions
+< host permissions/capability ceiling
+```
+
+项目本地配置由 `oet init --scope local` 自动加入 `.gitignore`。
+
+### 配置 schema
+
+```yaml
+apiVersion: orchestrate-engineering-team/v1
+
+roles:
+  development:
+    capabilities:
+      skills:
+        - id: frontend-development
+          ref: acme-frontend-development
+          required: false
+
+      materials:
+        - id: engineering-standards
+          path: docs/engineering/standards.md
+          required: true
+
+    hostBindings:
+      preferred: team-development
+      adapters:
+        example-host:
+          agent: team-development
+          requirements:
+            - id: engineering-capabilities
+              locator: vendor-specific-package-reference
+
+  product-test:
+    capabilities:
+      skills:
+        - id: exploratory-testing
+          ref: exploratory-testing
+          required: true
+```
+
+规则：
+
+- 只允许四个 canonical role ID；
+- Skill/material 项在角色和类型内必须有唯一稳定 `id`；
+- 不同 `id` 顺序追加；高层相同 `id` 整项替换；`enabled: false` 禁用低层项目；
+- 未知顶层或 portable capability 字段报错，防止拼写静默失效；
+- `hostBindings.adapters.<id>` 是 Adapter 私有命名空间，由对应 Adapter 校验；核心只验证基本 YAML/JSON 值安全；
+- material 默认必须是项目相对路径，realpath 不得越过项目根，拒绝危险 symlink/path traversal；用户级配置若需要外部材料必须显式标记 `scope: user`；
+- required 能力无法解析时阻止该 specialist 派发，由 Main 询问降级、改用普通单 Agent 或取消；optional 缺失时继续并记录 limitation；
+- 没有任何配置时正常使用内置基础角色，不强迫首次配置，也不在普通任务中反复提示。
+
+## Resolved Role 与 Adapter Contract
+
+### 核心解析结果
+
+Main 的 conceptual interface 为：
+
+```text
+resolveRole(roleId, focusedTask, configLayers, hostFacts) -> ResolvedRole
+dispatch(ResolvedRole) -> SpecialistResult
+```
+
+`ResolvedRole` 至少包含：
+
+```yaml
+role: development
+contract:
+  purpose: focused implementation
+  restrictions: [no-user-decisions, no-overall-coordination]
+capabilities:
+  skills:
+    - id: frontend-development
+      requested: acme-frontend-development
+      required: false
+      status: resolved|missing|conflict|unsupported
+      source: project|user|adapter|unknown
+  materials: []
+host:
+  adapter: generic|<adapter-id>
+  agent: <resolved name or unknown>
+  mode: native|prompt-fallback
+  toolsPolicy: allowlist|denylist|inherited|advisory|unknown
+  sandbox: read-only|workspace-write|inherited|unknown
+  isolation: worktree|sandbox|shared|unknown
+limitations: []
+```
+
+### Adapter Contract
+
+首版发布宿主中立协议和 conformance fixtures，不发布 Pi/Claude/Codex/Gemini 实现。未来 adapter package 使用统一命名形态，例如：
+
+```text
+@orchestrate-engineering-team/adapter-pi
+@orchestrate-engineering-team/adapter-claude-code
+@orchestrate-engineering-team/adapter-codex
+@orchestrate-engineering-team/adapter-gemini-cli
+```
+
+Adapter 接口只负责：
+
+- `detect(context)`：判断宿主和支持能力；
+- `validateBinding(binding)`：校验宿主私有配置；
+- `resolve(request)`：把 portable role/capability request 转为 `LaunchPlan`；
+- `scaffold(options)`：可选，生成 native Agent 配置草案；
+- `diagnose(plan)`：返回 effective capability、provenance 和 limitations。
+
+Adapter 不拥有 canonical Role Contract，不自动安装依赖，不在协议内实现任务状态机，也不替 Main 决定是否派发。实际执行继续使用宿主原生 subagent 机制。
+
+若没有 Adapter，Main 使用 generic prompt fallback：注入 compact Role Contract、focused task、精确 Skill 名称/路径和材料引用；不全量复制父会话或所有 Skill 正文。
+
+## 交互支持
+
+### Main 对话式配置
+
+显式触发方式包括：
+
+- “配置工程团队”
+- “强化 Development Agent”
+- `/skill:orchestrate-engineering-team configure`
+
+交互流程固定为：
+
+1. 读取并展示当前 effective config 和 provenance；
+2. 询问目标 scope：user、project 或 local；不静默选择；
+3. 询问要强化的角色；
+4. 收集 Skill、material、preferred native Agent、adapter-specific requirement；
+5. 对 executable package/plugin/MCP 仅记录 requirement 和信任提示，不自动安装；
+6. 展示配置 diff、覆盖来源、required/optional 语义和潜在权限影响；
+7. 用户确认后写入；
+8. 运行 doctor 并展示 resolved/missing/conflict/unsupported；
+9. 写入失败或 CLI 不可用时保留草案，不声称配置已验证。
+
+正常 orchestration 不要求先配置。只有已声明的 required capability 缺失时才中断并询问用户。
+
+### 独立 CLI
+
+CLI 作为独立可选 npm 子包发布：
+
+```text
+@orchestrate-engineering-team/cli
+bin: oet
+```
+
+核心 Skill 保持无运行时依赖。CLI 提供：
+
+```text
+oet init --scope user|project|local [--dry-run]
+oet configure [--role <role>] [--scope <scope>]
+oet config show [--effective] [--role <role>] [--json]
+oet config apply --scope <scope> --input <json-or-yaml> [--dry-run]
+oet doctor [--role <role>] [--adapter <id>] [--json]
+oet schema [--json]
+```
+
+- `configure` 是人类交互 wizard；
+- `config show/apply --json` 是 Main 对话式配置的稳定机器接口；
+- Main 检测到 CLI 后优先调用它，避免自己实现 merge/validation；
+- CLI 未安装时 Main 不自动执行 `npx --yes`，而是提供安装命令并可生成未验证草案；
+- CLI 只加载用户显式指定并已安装的 adapter package，不从配置 locator 自动下载或执行代码；
+- 所有写操作先支持 dry-run，覆盖已有配置前必须展示 diff；
+- 退出码区分成功、配置无效、required capability 缺失、adapter 不可用和用法错误。
+
+### 可观测性
+
+每次有意义的 specialist dispatch 都构造临时 capability summary；正常成功无需作为仪式性用户输出，但以下情况必须可见：
+
+- required capability 缺失；
+- Skill 来源冲突；
+- adapter/native Agent 不可用而发生 prompt fallback；
+- requested 与 effective tools/sandbox/isolation 不一致；
+- package/MCP/extension 信任未满足。
+
+不得记录密钥、完整环境变量、隐藏推理或敏感 MCP 数据。
+
+## 仓库与分发结构
+
+- 保留一个 canonical Main Skill 目录及其内部 role contracts、schema 和 task packet；
+- 删除 `architect-work-item`、`develop-work-item`、`test-product-work-item`、`review-work-item` 四个 Skill 目录及对应 UI metadata；
+- Plugin/Skills CLI 安装只发现并安装一个 Main Skill；
+- 引入 workspace 子包 `packages/cli`，发布为 `@orchestrate-engineering-team/cli`；
+- 引入共享纯配置模块 `packages/config`，供 CLI、validator 和 adapter conformance tests 使用，不参与 Main 的任务调度；
+- 引入 `packages/adapter-contract`，只发布类型/schema、fixtures 和 conformance helper；
+- 不提供任何首版具体宿主 adapter；
+- 更新 package/release fixtures，使“一个公开 Skill + 可选 CLI/contract 子包”成为发布事实。
+
+## 文档留存
+
+新增最终方案文档：
+
+```text
+docs/design/single-main-skill-role-capability-injection.md
+```
+
+并在 `.gitignore` 中显式放行。文档包含：
+
+- 问题与术语；
+- 单一 Main Skill 决策；
+- Role Contract / Professional Capability / Host Adapter 分层；
+- 配置 schema、优先级和示例；
+- Main 与 CLI 交互流程；
+- Adapter Contract；
+- 安全、信任和可观测性；
+- 无配置 fallback；
+- 包结构和未来 Pi 等 adapter 的扩展方式；
+- 被拒绝方案及理由。
+
+同时修订：
+
+- `docs/research/role-specific-agent-capability-injection.md`：把“四个 Role Skill 作为语义源”修正为“canonical internal Role Contract”；
+- README：只展示 Main Skill 安装、基础使用、配置和可选 CLI；
+- CONTRIBUTING/acceptance report/CHANGELOG：移除 exactly-five-Skills 假设并记录 breaking redesign；
+- 安全说明：明确 Skill/material prompt injection、adapter executable trust、package 不等于 role isolation。
+
+## 测试与验证
+
+### Role Contract
+
+- 只有四个稳定角色且每个具备 route、authority、context、returns；
+- Product Test/Review 独立性和角色禁止项不可被 overlay 删除；
+- Main 不依赖已删除 Role Skill 也能构造完整 dispatch；
+- 无配置时使用基础角色正常运行。
+
+### 配置与合并
+
+- user/project/local/task 优先级；
+- 相同 ID 整项替换、`enabled: false`、重复 ID 和未知字段；
+- required/optional 缺失行为；
+- material path escape、symlink escape 和用户作用域材料；
+- host adapter 私有 namespace 不污染 portable schema；
+- provenance 与冲突诊断稳定。
+
+### CLI 与交互
+
+- `init/configure/show/apply/doctor/schema` 的成功、dry-run、JSON 和退出码；
+- 配置覆盖前 diff 与确认；
+- CLI 不自动安装 adapter/package；
+- Main 对话式 happy path、取消、修改 scope、缺失 CLI、required capability 缺失和 prompt fallback；
+- project-local 初始化正确维护 `.gitignore`。
+
+### Adapter Contract
+
+使用 fake adapters 验证：
+
+- detect/validate/resolve/scaffold/diagnose；
+- native 与 prompt-fallback LaunchPlan；
+- requested/effective 能力差异；
+- adapter 不得扩大 canonical authority；
+- adapter unavailable、unsupported capability 和 malformed private config；
+- conformance fixtures 可被未来独立 adapter package 复用。
+
+### 安装与发布
+
+- Skills CLI 和 Plugin 生命周期只发现一个 Main Skill；
+- copied-package fixture 不包含四个已删除 Role Skill；
+- CLI npm tarball 只包含声明资源并可从干净临时目录运行；
+- config/adapter-contract 子包导出稳定；
+- `pnpm verify`、package smoke 和 `git diff --check` 全部通过；
+- 增加静态检查，确保宿主中立核心不引用 Pi 专属路径、agent 名称或 package 语义。
+
+## 重要行为变化
+
+- 公开 Skill 数量从五个变为一个；这是有意 breaking change，无兼容 shim；
+- 角色身份由内部 Role Contract 提供，不再通过 Role Skill 加载；
+- 专业 Skill 成为用户可配置能力，而非角色身份；
+- Package/plugin 只作为资源来源和 setup requirement；
+- 缺少配置不会阻止使用；缺少已声明 required capability 会阻止对应 specialist 派发；
+- 核心不默认任何宿主，Pi 等支持通过未来独立 adapter package 提供。
+
+## 明确假设与默认值
+
+- 项目仍坚持 host-native dispatch、无 `.agent-work`、无自建 workflow state machine；
+- 首版不发布具体宿主 adapter，只定义协议和 fake conformance adapter；
+- CLI 是可选独立 npm 子包，Main Skill 本身没有运行时依赖；
+- 默认 scope 不自动选择，配置交互必须询问 user/project/local；
+- 没有配置时静默使用基础角色；
+- 普通 task additions 不持久化；
+- 不在 dispatch 或 configure 中自动安装 package/adapter/MCP；
+- 不维护四个旧 Role Skill 的兼容性。

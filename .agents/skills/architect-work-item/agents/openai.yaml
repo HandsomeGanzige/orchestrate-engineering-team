@@ -1,7 +1,0 @@
-interface:
-  display_name: "Architecture Agent"
-  short_description: "Propose v0.3.0 decisions for Main confirmation"
-  default_prompt: "Use $architect-work-item v0.3.0 under the immutable packet digest and return advisory decision proposals that Main must confirm."
-
-policy:
-  allow_implicit_invocation: false

@@ -1,6 +1,6 @@
 ---
 name: orchestrate-engineering-team
-description: Coordinate a project-local engineering team for a medium or large delivery or exploration goal that needs decomposition, multiple specialist roles, meaningful parallel work, architecture tradeoffs, or cross-session recovery. Also use to resume an existing Work Item. Do not use for a single clear change that one agent can complete in the current session without architecture or coordination; exit orchestration before creating `.agent-work` or spawning roles in that case.
+description: Coordinate an engineering team through one Main Skill. Dynamically resolve canonical Architecture, Development, Product Test, and Review roles, inject configured professional capabilities and materials, use host-native subagents when valuable, and fall back honestly when native role injection is unavailable. Also use when asked to configure or strengthen the engineering team.
 license: MIT
 metadata:
   author: HandsomeGanzige
@@ -8,65 +8,54 @@ metadata:
 
 # Orchestrate Engineering Team
 
-Act as the Main Agent. Coordinate the outcome and own task state; never implement production code, impersonate a role, or use a local fix to bypass Development.
+Act as the Main Agent. Decide whether independent context, domain expertise, alternative judgement, or safe concurrency will materially improve the user's outcome. Never dispatch roles ceremonially or impose a mandatory phase order. Exit to ordinary single-Agent work for one clear change.
 
-## Gate orchestration first
+This is the only public Skill. Architecture, Development, Product Test, and Review are stable internal roles defined in [role-contracts.yaml](references/role-contracts.yaml), not separate Skills. Read only the selected contract immediately before dispatch. A contract is an immutable authority ceiling: configuration may add professional capabilities, materials, and native bindings or narrow permissions, but may not remove independence, grant user decision authority, or take overall coordination from Main.
 
-Before any `.agent-work` write or role spawn, decide whether the request actually needs orchestration.
+## Resolve a role
 
-- Enter for independent engineering parts, multiple specialist roles, material architecture tradeoffs, useful parallel development, or cross-session recovery.
-- Exit for a single clear outcome with an obvious implementation that one agent can complete now. Create no Work Item or Assignment and spawn no role; continue as an ordinary single-agent task outside this Skill.
-- Treat a clear, unambiguous user request as confirmed input. Do not ask the user to repeat or reconfirm it. Ask only when an unresolved choice would materially change the outcome, permissions, irreversible effects, cost, or an already confirmed decision.
+For each useful specialist:
 
-If orchestration applies, require native subagent dispatch with explicit empty-history isolation and the capabilities required by each selected role. If a required runtime capability, Role Skill, or dispatch control is unavailable, mark the affected work blocked and report it. Do not simulate a specialist, silently widen access, or claim isolation that the runtime cannot enforce.
+1. Build a focused task using [role-task-packet.md](assets/role-task-packet.md).
+2. Read configuration layers, when present, in this order: `~/.agents/orchestrate-engineering-team.yaml`, `.agents/orchestrate-engineering-team.yaml`, `.agents/orchestrate-engineering-team.local.yaml`, then explicit task additions. Higher layers replace the same capability ID and append different IDs. `enabled: false` disables a lower-layer item.
+3. Resolve requested Skills and materials. Skills add professional knowledge; they do not define role identity. A package/plugin is only a distribution or availability requirement and must not be automatically installed or trusted during dispatch.
+4. Ask a configured host Adapter to validate its private binding and create a native launch plan. Prefer the host's native subagent mechanism and effective sandbox/isolation controls.
+5. If no Adapter is available, use a generic prompt fallback containing the compact role contract, focused task, exact resolved Skill names/paths, and material references. Do not copy every Skill body or the entire parent conversation.
 
-## Use the workflow model
+A resolved request should account for role/contract, requested capability and provenance, native Agent, mode (`native` or `prompt-fallback`), effective or unknown tools policy, sandbox, workspace isolation, and limitations. Host permissions are always the final capability ceiling. Prompt restrictions are advisory, not a sandbox.
 
-- A **Work Item** is an independently acceptable, resumable delivery or exploration goal. Each Work Item Main owns exactly one plain-Markdown `work.md` as its semantic document.
-- A sibling **`state.json`** holds disposable operational coordination while the Work Item is open. It is machine state, not a second semantic task document, and is removed rather than archived at completion.
-- An **Assignment** is one bounded Architecture, Development, Test, Review, Retest, or Rereview execution. It has no document or directory, and its role envelope is a transient message rather than retained history.
-- A **Child Work Item** is an independently acceptable subgoal that needs multiple Todos, role coordination, or cross-session recovery. Its Child Main independently owns the child's `work.md`; a step, stage, single Todo, or role execution is not a child.
+Required capability missing: do not dispatch that specialist. Ask the user whether to degrade the requirement, use an ordinary single Agent, or cancel. Optional capability missing: continue and record the limitation. With no configuration, silently use the built-in contracts and normal generic/native dispatch.
 
-Main is the sole semantic writer of its Work Item `work.md` and the sole task-state writer for its sibling `state.json`. A Child Main writes only its own child documents. Ordinary roles write neither file. These are collaboration constraints, not filesystem security guarantees.
+## Choose specialists dynamically
 
-`governance-v2.mjs` is the fail-closed authority for immutable contracts, narrowing, capabilities, gates, claims, limits, attempts, Git attribution, and bounded evidence records. `inspect` exposes only persisted graph/evidence counters as persisted facts; transient checks are never described as persisted proof, and Skill-local enforcement is not operating-system isolation.
+- **Architecture**: consequential options and tradeoffs need independent investigation.
+- **Development**: a focused implementation responsibility benefits from dedicated ownership.
+- **Product Test**: user, business, compatibility, or stability behavior needs independent product judgement.
+- **Review**: engineering correctness, integration, architecture, standards, security, performance, maintainability, or test design needs independent inspection.
 
-## Run the Main workflow
+Roles are optional, not mandatory phases. Main decides sequencing and completion. Product Test and Review remain independent from implementation; do not coach them toward approval. Concurrent writers need disjoint ownership or real host-provided worktree/sandbox isolation. Otherwise serialize.
 
-1. Read [state-and-voting.md](references/state-and-voting.md) when creating, resuming, transitioning, validating, or closing a Work Item.
-2. Use only `open`, `plan`, `next`, `dispatch`, `accept`, `resolve`, `close`, and `inspect` through `node .agents/skills/orchestrate-engineering-team/scripts/workflow.mjs <intent> --payload <file|->`. Generate help, payload JSON Schema, result/error contracts, and examples with `--help`, `--schema`, and `--examples`; legacy low-level commands and aliases do not exist. Let the helper maintain `state.json`; keep `work.md` direct Markdown with no frontmatter, fenced JSON, raw role envelopes, or execution logs.
-3. Move through `align -> design -> develop -> verify -> close`. Skip `design` when no substantive architecture decision is needed. Keep exactly one Todo in progress for each active Work Item.
-4. Make Architecture, Development, Test, and Review bounded Assignments under the byte-identical immutable v2 global contract and digest inherited by every descendant, Assignment, attempt, and packet. Architecture returns advisory decision proposals that Main must explicitly confirm; Development returns its exact Git-derived changed surface and authoritative artifacts; Test and Review return their evidence method and bounded structured findings. Role completion never implies Work Item completion.
-5. Default medium and large code changes to independent Test and Review. After the final Development result is known, calculate their exemption votes separately as defined in the reference. Run every role not validly exempted.
-6. Route a Test or Review finding to a Development Assignment. After a Test fix, rerun only Test; after a Review fix, rerun only Review unless the fix changes a shared interface or introduces a new behavior surface that warrants a fresh vote.
-7. Complete only after success criteria, required verification, descendants, blockers, and residual issues are reconciled. Curate `work.md` into a factual user-readable delivery record, remove runtime-only `state.json`, retain the completed tree in the archive, and report the result to the user.
+Do not call bundled workflow scripts. Do not create workflow state, `.agent-work`, task databases, lifecycle stages, leases, receipts, voting, or machine-managed quality gates.
 
-Normal Agent context excludes the retained archive. Use explicit history access to locate lightweight completed candidates, then read only the selected `work.md`.
+## Capability honesty
 
-## Dispatch minimal Assignments
+Expose a capability summary whenever a required item is missing, Skill sources conflict, native binding falls back to a prompt, requested and effective tools/sandbox/isolation differ, or executable package/MCP/extension trust is unmet. Use `unknown` rather than inventing enforcement. Never log secrets, complete environment variables, hidden reasoning, or sensitive MCP data.
 
-Read only the selected entry in [agent-profiles.yaml](references/agent-profiles.yaml), then generate a package shaped by [role-task-packet.md](assets/role-task-packet.md). Include only the Assignment, done conditions, allowed read/write scopes, exact authoritative project pointers, directly relevant confirmed decisions, capability availability, and the fixed return schema. Never include the full parent conversation, ancestor or sibling documents, archived Work Items, unrelated history, prior role envelopes, or tool logs.
+After each result, evaluate evidence rather than an envelope, reconcile contradictions from project facts, route defects to the smallest useful focused context, and ask the user only about changed outcomes, permissions, irreversible actions, material cost, or accepted risk. Keep durable facts in code, tests, configuration, documentation, and decision records.
 
-Every role spawn must explicitly use:
+## Configure the team
 
-```json
-{
-  "fork_turns": "none"
-}
-```
+When explicitly asked to “configure the engineering team”, strengthen a role, or run `configure`:
 
-Name the Role Skill and its path at the start of the spawn message and require the agent to read it completely. If the runtime supports typed Skill attachment, attach only that role's Skill as well. Role agents send no progress narration; allow one short message only for a blocker Main can act on.
+1. Show effective configuration and provenance.
+2. Ask for scope (`user`, `project`, or `local`); never choose silently.
+3. Ask which role and which installed Skill, material, preferred native Agent, or adapter-specific requirement to add.
+4. Treat executable adapters/packages/plugins/MCP as untrusted requirements; record but do not install them.
+5. Show the diff, replacement provenance, required/optional meaning, and permission implications.
+6. Write only after confirmation, then run doctor and report `resolved`, `missing`, `conflict`, or `unsupported`.
 
-Parallelize Development Assignments only when they have no ordering dependency, have disjoint write scopes, use settled shared interfaces, avoid shared migrations/lockfiles/global configuration/generated files/models, have a named integrator, fit available slots, and shorten the critical path. Otherwise run them sequentially.
+Prefer the optional `oet` CLI when installed: `oet config show --effective --json`, `oet config apply`, and `oet doctor`. Never run `npx --yes` automatically. If the CLI is absent, provide `npm install --global @orchestrate-engineering-team/cli` and may prepare an unverified draft; do not claim it was validated.
 
-## Delegate a Child Work Item
+## Deliver one coherent outcome
 
-Create a child only when it meets every Child Work Item condition in the state reference and stays inside the confirmed parent scope. Main may do this without redundant user confirmation.
-
-Spawn the Child Main with this same Skill and explicit `fork_turns: "none"`. Give it only the child delivery contract, its document link, confirmed bounded outcome, parent acceptance and result contract, capability facts, and exact pointers. The Child Main owns only its child `work.md` and sibling `state.json` and returns a concise completion event. The parent never mirrors child internals; it retains only the contract, link, acceptance, returned result, and artifact references.
-
-## Load resources progressively
-
-- Read [state-and-voting.md](references/state-and-voting.md) for document/state separation, lifecycle, child rules, votes, history access, and completion invariants.
-- Read the selected profile only in [agent-profiles.yaml](references/agent-profiles.yaml) immediately before dispatch.
-- Treat files under `assets/` as script-consumed output templates; do not load them merely to operate the workflow.
+Report what changed or was learned, material decisions, validation, unresolved risks, and relevant files. Mention specialist activity only where its independent evidence helps the user.

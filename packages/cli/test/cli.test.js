@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+const BIN = fileURLToPath(new URL("../bin/oet.js", import.meta.url));
+function run(args, cwd, home = cwd) { return spawnSync(process.execPath, [BIN, ...args], { cwd, env: { ...process.env, HOME: home }, encoding: "utf8" }); }
+test("init local supports dry-run and maintains gitignore", async () => { const root = await mkdtemp(path.join(os.tmpdir(), "oet-cli-")); try { let result = run(["init", "--scope", "local", "--dry-run"], root); assert.equal(result.status, 0, result.stderr); await assert.rejects(readFile(path.join(root, ".agents/orchestrate-engineering-team.local.yaml"))); result = run(["init", "--scope", "local"], root); assert.equal(result.status, 0, result.stderr); assert.match(await readFile(path.join(root, ".gitignore"), "utf8"), /orchestrate-engineering-team\.local\.yaml/); } finally { await rm(root, { recursive: true, force: true }); } });
+test("apply/show JSON and required-missing exit code", async () => { const root = await mkdtemp(path.join(os.tmpdir(), "oet-cli-")); try { const input = path.join(root, "input.yaml"); await writeFile(input, "apiVersion: orchestrate-engineering-team/v1\nroles:\n  review:\n    capabilities:\n      skills:\n        - id: sec\n          ref: unavailable-security\n          required: true\n"); let result = run(["config", "apply", "--scope", "project", "--input", input], root); assert.equal(result.status, 0, result.stderr); result = run(["config", "show", "--effective", "--json"], root); assert.equal(result.status, 0); assert.equal(JSON.parse(result.stdout).effective.roles.review.capabilities.skills[0].id, "sec"); result = run(["doctor", "--role", "review", "--json"], root); assert.equal(result.status, 3); assert.equal(JSON.parse(result.stdout).roles.review.blocked, true); } finally { await rm(root, { recursive: true, force: true }); } });
+test("invalid config and unavailable adapter have distinct exits", async () => { const root = await mkdtemp(path.join(os.tmpdir(), "oet-cli-")); try { let result = run(["config", "apply", "--scope", "project", "--input", "bad: true"], root); assert.equal(result.status, 2); result = run(["doctor", "--adapter", "does-not-exist-oet", "--json"], root); assert.equal(result.status, 4); } finally { await rm(root, { recursive: true, force: true }); } });

@@ -1,7 +1,0 @@
-interface:
-  display_name: "Test Agent"
-  short_description: "Return structured v0.3.0 verification evidence"
-  default_prompt: "Use $verify-work-item v0.3.0 under the immutable packet digest and return an evidence method plus bounded structured findings to Main."
-
-policy:
-  allow_implicit_invocation: false

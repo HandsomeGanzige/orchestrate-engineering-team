@@ -1,7 +1,7 @@
 {
   "name": "orchestrate-engineering-team",
-  "version": "0.3.0",
-  "description": "Coordinate Main-owned work items through bounded role assignments and optional child workflows.",
+  "version": "1.0.0",
+  "description": "Resolve internal engineering roles and configurable capabilities through one Main Skill.",
   "author": {
     "name": "HandsomeGanzige"
   },

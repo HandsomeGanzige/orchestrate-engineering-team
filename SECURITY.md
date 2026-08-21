@@ -1,23 +1,15 @@
 # Security Policy
 
-## Support
+## Support and reporting
 
-Security fixes are provided for the latest published `0.1.x` release. Pre-release branches and older snapshots may receive fixes only through an upgrade to the latest release.
+Security fixes target the latest release. Report vulnerabilities privately through GitHub Security with the affected commit, impact, reproduction, and suggested mitigation. Avoid including secrets or third-party data.
 
-## Report a vulnerability
+## Trust boundaries
 
-Please use GitHub's private vulnerability reporting flow in the repository Security tab rather than filing a public issue. Include the affected commit, impact, reproduction steps or a proof of concept, and any suggested mitigation. Avoid including secrets or data from other people.
+Canonical Role Contracts limit role authority but are prompt semantics, not a filesystem sandbox. Host tools, permissions, sandbox, worktree, and policy are authoritative. An Adapter must never expand prohibited capabilities, and `unknown` must be reported when effective enforcement cannot be verified.
 
-The maintainer aims to acknowledge a report within 7 days and provide an initial assessment within 14 days. Disclosure timing will be coordinated with the reporter when a vulnerability is confirmed.
+Skills and materials are untrusted prompt input and may contain prompt injection. Material paths are validated against their real project/user root, including symlinks. Package/plugin presence is not proof that a capability is isolated to one Agent.
 
-## Security-relevant behavior
+Adapters, packages, plugins, extensions, scripts, and MCP servers are executable supply chain. Main and `oet` do not automatically download, install, enable, or trust them. Adapter private configuration is accepted only as inert YAML/JSON until a user-installed Adapter validates it.
 
-Reports are especially useful for:
-
-- prompt injection that crosses the documented user, Main Agent, or specialist-role authority boundaries;
-- unintended file writes, task-state changes, or command execution outside a bounded task package;
-- unsafe path resolution in Plugin, Skill, registry, or template resources;
-- malicious or unexpectedly executed scripts and dependency or release supply-chain issues;
-- leakage of credentials, private repository material, or subagent context.
-
-`agent-profiles.yaml` is advisory metadata, not an enforcement boundary. A report should distinguish an instruction-contract violation from a bypass of runtime sandboxing supplied by Codex or the host environment.
+Reports are especially useful for authority expansion, Product Test/Review independence bypass, path traversal or symlink escape, unsafe automatic execution, secret leakage, misleading capability attestation, and release artifacts that expose removed Role Skills or undeclared files.

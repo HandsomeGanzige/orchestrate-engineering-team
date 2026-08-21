@@ -1,0 +1,11 @@
+{
+  "name": "@orchestrate-engineering-team/config",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Host-neutral configuration resolution for orchestrate-engineering-team",
+  "license": "MIT",
+  "exports": { ".": "./src/index.js", "./schema": "./schema.json" },
+  "files": ["src", "schema.json", "README.md"],
+  "dependencies": { "yaml": "2.9.0" },
+  "engines": { "node": ">=22 <23" }
+}

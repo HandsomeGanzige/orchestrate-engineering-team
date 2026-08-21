@@ -10,13 +10,7 @@ const PROJECT_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const PLUGIN_NAME = "orchestrate-engineering-team";
 const MARKETPLACE_NAME = "orchestrate-engineering-team";
 const PLUGIN_SELECTOR = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
-const EXPECTED_SKILLS = Object.freeze([
-  "architect-work-item",
-  "develop-work-item",
-  "orchestrate-engineering-team",
-  "review-work-item",
-  "verify-work-item",
-]);
+const EXPECTED_SKILLS = Object.freeze(["orchestrate-engineering-team"]);
 
 /**
  * Restricts destructive Plugin lifecycle checks to a disposable GitHub Actions runner.
@@ -95,7 +89,7 @@ function containsInstalledPlugin(value) {
 }
 
 /**
- * Validates the exact five enabled Plugin Skills discovered by the Codex app server.
+ * Validates the single enabled Plugin Skill discovered by the Codex app server.
  *
  * @param {object} response - `skills/list` response body.
  * @param {string} codexHome - Isolated Codex home containing the Plugin cache.
@@ -117,7 +111,7 @@ export function assertDiscoveredPluginSkills(response, codexHome) {
   assert.deepEqual(
     discoveredNames,
     expectedNames,
-    "Codex did not discover exactly the five installed Plugin Skills",
+    "Codex did not discover exactly the installed Main Skill",
   );
   assert.ok(
     pluginSkills.every(({ enabled }) => enabled === true),
@@ -227,7 +221,7 @@ async function discoverInstalledPluginSkills(environment, codexHome) {
       id: 1,
       method: "initialize",
       params: {
-        clientInfo: { name: "orchestrate-engineering-team-ci", version: "0.3.0" },
+        clientInfo: { name: "orchestrate-engineering-team-ci", version: "0.5.0" },
         capabilities: { experimentalApi: true },
       },
     });

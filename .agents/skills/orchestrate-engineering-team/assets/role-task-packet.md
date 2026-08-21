@@ -1,76 +1,37 @@
-# Assignment package
+# Focused resolved-role request
 
-Protocol: `orchestrate-engineering-team/v0.3.0`
+Use this as a prompt checklist, not a required schema. Include only information that helps the selected specialist reason independently.
 
-Assignment ID: <semantic-assignment-id>
-Attempt ID: <assignment-id-attempt-n>
-Role: <Architecture | Development | Test | Review | Retest | Rereview>
+## Outcome
 
-## Immutable v2 global contract
+- User outcome and focused specialist question
+- Useful completion evidence
 
-Contract digest: `<sha256>`
+## Context
 
-<Byte-identical contract inherited from the root Work Item. The Assignment, attempt, and packet must carry the same digest; roles may narrow but never widen it.>
-
-## Objective and done conditions
-
-<One bounded objective and observable completion conditions.>
-
-## Scope
-
-Allowed reads:
-
-- <Exact authoritative project path and why it is needed.>
-
-Allowed writes:
-
-- <Exact assigned project file or module; use `none` when read-only.>
-
-## Directly relevant confirmed decisions
-
-- <Only decisions that constrain this Assignment.>
+- Relevant project facts, exact files, and confirmed decisions
+- Assumptions to verify; only necessary prior findings
+- Canonical role purpose, authority, independence, prohibited capabilities, and return expectations
 
 ## Capabilities
 
-Available:
+- Requested Skills with stable ID, exact ref/path, required/optional status, source, and resolution status
+- Materials with exact safe path and provenance
+- Native Agent/Adapter or generic prompt fallback
+- Effective tools policy, sandbox, isolation, and known limitations (`unknown` when unverified)
 
-- <Capability>
+Never treat package presence as proof of per-Agent capability or silently install an adapter, plugin, extension, MCP server, or package.
 
-Required:
+## Scope and tools
 
-- <Capability; any missing required capability makes the Assignment blocked.>
+- Allowed reads and writes
+- Host-provided tools and real enforcement boundaries
+- Integration ownership for multiple writers
 
-Unavailable:
+## Independence
 
-- <Capability or `none`.>
-
-## Dispatch
-
-Spawn this role with `fork_turns: "none"`. The role must not create or modify any Work Item `work.md`, `state.json`, or other task state.
+Use a fresh or explicitly isolated context when the host supports it. Product Test and Review remain independent: do not include approval coaching or unrelated implementation history.
 
 ## Return
 
-Return only the schema for the selected role. Role returns are transient messages and must not be persisted as task-local history. Do not include progress narration, private reasoning, full logs, the parent task, or unknown fields.
-
-```yaml
-status: completed | partial | blocked
-summary:
-  - "At most three one-sentence results."
-artifacts:
-  - path: "relative/path"
-    purpose: "One-sentence purpose."
-files:
-  - "Only production or test files actually involved."
-checks:
-  - command: "Command run or check name."
-    result: passed | failed | not_run
-requires_test: true | false | null
-test_reason: "One-sentence reason or null."
-requires_review: true | false | null
-review_reason: "One-sentence reason or null."
-blockers: []
-```
-
-Development uses the envelope above with boolean votes, the exact Git-derived changed surface in `files`, and authoritative changed project artifacts. Architecture uses the same envelope with `artifacts: []` plus `decision_proposals` entries containing exactly `id`, `summary`, `options`, and `recommendation`; proposals remain advisory until Main confirms them.
-
-Test, Retest, Review, and Rereview omit `artifacts` and all four vote fields. They add `evidence_method` and bounded `findings`; each finding contains exactly `severity`, `summary`, `evidence`, and canonical `pointers`. `partial` and `blocked` require actionable blockers.
+Return concise, decision-useful conclusions, evidence and commands actually used, changed/relevant files, severity-ordered findings where applicable, blockers, uncertainty, residual risk, and recommended next action. Do not fabricate evidence or force empty fields into a template.

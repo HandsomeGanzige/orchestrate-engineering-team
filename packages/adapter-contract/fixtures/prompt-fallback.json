@@ -1,0 +1,4 @@
+{
+  "request": { "role": "review", "focusedTask": "inspect the change" },
+  "expectedMode": "prompt-fallback"
+}

@@ -48,7 +48,7 @@ export async function main(arguments_ = process.argv.slice(2)) {
     }
     const summary = result.summary;
     console.log(
-      `Agent Profile check passed: ${summary.skills} Skills, ${summary.uiMetadataFiles} UI metadata files, ${summary.profiles} profiles, ${summary.returnContracts} return contracts.`,
+      `Agent Profile check passed: ${summary.skills} public Skill, ${summary.roles} internal role contracts, ${summary.mainResources} Main resources.`,
     );
     return 0;
   } catch (error) {

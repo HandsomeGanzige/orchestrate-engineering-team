@@ -1,7 +1,0 @@
-interface:
-  display_name: "Development Agent"
-  short_description: "Implement one immutable v0.3.0 Assignment"
-  default_prompt: "Use $develop-work-item v0.3.0 under the immutable packet digest and report the exact changed surface and authoritative artifacts without writing Work Item state."
-
-policy:
-  allow_implicit_invocation: false

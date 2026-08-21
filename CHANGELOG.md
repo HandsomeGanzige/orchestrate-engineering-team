@@ -4,6 +4,30 @@ Notable changes are recorded chronologically. Updates replace the current workfl
 
 ## Current
 
+### v1.0.0
+
+- Replaced five public Skills with one `orchestrate-engineering-team` Skill and four immutable internal Role Contracts; no compatibility shims are retained.
+- Added user/project/local/task capability configuration with strict merging, provenance, safe material paths, required/optional behavior, and no-configuration fallback.
+- Added host-neutral config and Adapter contract packages, generic prompt fallback, fake Adapter conformance coverage, and explicit effective-capability limitations.
+- Added the optional `@orchestrate-engineering-team/cli` with init/configure/show/apply/doctor/schema, dry-run diffs, local ignore maintenance, JSON output, and distinct exit codes.
+- Updated Plugin, installer, copied-package, tarball, documentation, security, and host-neutral validation around the single-Skill release shape.
+
+### v0.5.0
+
+- Removed the bundled workflow runtime, eight-intent CLI, strict state v3, `.agent-work` persistence, lifecycle stages, leases, revisions, receipts, and machine-managed quality gates.
+- Made Main directly responsible for deciding when specialists add value, which roles to select, how to sequence or parallelize them, what evidence is proportionate, and when delivery is complete.
+- Reframed multi-Agent collaboration around independent context windows, domain expertise, alternative judgement, independent verification, and useful concurrency rather than mandatory role progression.
+- Replaced exact role packets and machine result envelopes with a focused specialist prompt checklist and concise evidence-based role guidance.
+- Simplified validation, packaging, and installer fixtures to verify the five canonical Skills and prohibit reintroducing bundled workflow-state machinery.
+
+### v0.4.0
+
+- Replaced `verify-work-item` with `test-product-work-item` and split Product Test from engineering Review: Product Test performs pre-development risk analysis plus post-development user/business/compatibility/stability verification; Review covers engineering-only architecture, standards, maintainability, security, performance, and test design.
+- Replaced Test/Review exemption voting with independent Product/engineering freshness gates and residual-risk disposition. Quality reports bind to the revision captured at Assignment start, preserve evidence when waived, and carry the specialist Agent's explicit judgement instead of deriving quality from test counts or scenario coverage.
+- Added strict state v3 with no migration or aliases, required `product-test` activities `risk-analysis|verification`, required `product-retest` activity `retest`, exact split result schemas, and a human-readable advisory Product risk brief in `work.md`. The brief informs Development without requiring matching tests; checks and scenarios remain optional report detail. Retest/Rereview is limited to completed non-passing origins.
+- Kept Development serial by default while permitting Main-selected parallel Assignments only for dependency-ready, bounded, disjoint work with settled shared interfaces, one integration owner, and a serial integration Development step when code combination is required; branch/worktree orchestration is outside the Skill model.
+- Updated all five Skills, eight-intent dependency-free runtime, checkers, copied/install/Plugin fixtures, documentation, and deterministic tests while retaining the Work Item/Child/archive model and its concurrency, crash-recovery, symlink, lock, journal, and cleanup protections.
+
 ### v0.3.0 - 2026-08-18
 
 - Replaced the low-level CLI with eight descriptor-driven intent commands and generated help, JSON Schemas, stable result/error contracts, allowlisted error codes, and examples.

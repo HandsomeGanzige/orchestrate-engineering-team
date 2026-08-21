@@ -1,0 +1,15 @@
+{
+  "name": "@orchestrate-engineering-team/cli",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Optional configuration and diagnostics CLI for orchestrate-engineering-team",
+  "license": "MIT",
+  "bin": { "oet": "./bin/oet.js" },
+  "files": ["bin", "src", "README.md"],
+  "dependencies": {
+    "@orchestrate-engineering-team/config": "workspace:*",
+    "@orchestrate-engineering-team/adapter-contract": "workspace:*",
+    "yaml": "2.9.0"
+  },
+  "engines": { "node": ">=22 <23" }
+}

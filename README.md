@@ -1,22 +1,35 @@
 # orchestrate-engineering-team
 
-One open Agent Skill for coordinating substantial engineering work through host-native specialist contexts and configurable professional capabilities.
+A host-neutral Agent Skill for coordinating substantial engineering work through host-native specialist contexts and configurable professional capabilities.
 
-The only public Skill is `orchestrate-engineering-team`. Architecture, Development, Product Test, and Review are internal canonical Role Contracts, not separate Skills or mandatory stages. Main uses them only when independent context, expertise, or verification materially improves the result.
+The repository exposes one public Skill, `orchestrate-engineering-team`. Architecture, Development, Product Test, and Review are internal Role Contracts, not separate Skills or mandatory stages. Main uses a role only when independent context, expertise, verification, or safe concurrency materially improves the result.
 
-## Install
+## Current status
+
+- Repository/workspace version: `1.0.0`.
+- Public Skill: one.
+- Internal Role Contracts: four (`architecture`, `development`, `product-test`, `review`).
+- Workspace packages: config, Adapter contract, and CLI.
+- Concrete host Adapters: none.
+- npm publication: the three scoped workspace packages are currently source-only and are not an installation prerequisite for the Skill.
+
+The Skill itself is usable without configuration or the CLI. The CLI supports configuration and diagnostics; it is not the orchestration runtime.
+
+## Install the Skill
+
+Install the canonical Skill directly from GitHub:
 
 ```bash
-npx --yes skills@1.5.19 add https://github.com/HandsomeGanzige/orchestrate-engineering-team --skill orchestrate-engineering-team --agent codex --yes
+npx --yes skills add https://github.com/HandsomeGanzige/orchestrate-engineering-team --skill orchestrate-engineering-team --agent codex --yes
 ```
 
 Remove it with:
 
 ```bash
-npx --yes skills@1.5.19 remove orchestrate-engineering-team --agent codex --yes
+npx --yes skills remove orchestrate-engineering-team --agent codex --yes
 ```
 
-An optional Codex Plugin points at the same canonical Skill directory:
+An optional Codex Plugin manifest points to the same Skill directory when working from a clone:
 
 ```bash
 codex plugin marketplace add .
@@ -25,18 +38,18 @@ codex plugin add orchestrate-engineering-team@orchestrate-engineering-team
 
 ## Use
 
-Ask the Main Skill to deliver or investigate a substantial engineering outcome. Main may use any useful combination of:
+Ask the Main Skill to deliver or investigate a substantial engineering outcome. Main may select any useful combination of:
 
-- Architecture for consequential options and tradeoffs;
-- Development for focused implementation ownership;
-- Product Test for independent user/business/compatibility/stability judgement;
-- Review for independent engineering inspection.
+- **Architecture** for consequential options and tradeoffs;
+- **Development** for focused implementation ownership;
+- **Product Test** for independent user, business, compatibility, and stability judgement;
+- **Review** for independent engineering inspection.
 
-One clear change stays with a normal single Agent. Main dispatches through the host's native subagent mechanism. With no host Adapter it uses an explicit compact prompt fallback and reports meaningful capability limitations.
+One clear change stays with a normal single Agent. Main dispatches through the host's native subagent mechanism. Without a host Adapter it uses an explicit compact prompt fallback and reports meaningful capability limitations.
 
 ## Configure professional capabilities
 
-Configuration is optional. Precedence is user → project → project-local → task additions → host capability ceiling.
+Configuration is optional. Precedence is user → project → project-local → ephemeral task additions → host capability ceiling.
 
 ```yaml
 # .agents/orchestrate-engineering-team.yaml
@@ -56,37 +69,37 @@ roles:
       preferred: team-development
 ```
 
-The optional CLI provides validation, merge/provenance inspection, dry-run writes, and diagnostics:
+From a repository clone, run the source CLI with Node.js:
 
 ```bash
-npm install --global @orchestrate-engineering-team/cli
-oet init --scope local --dry-run
-oet config show --effective --json
-oet configure
-oet doctor --json
+node packages/cli/bin/oet.js --help
+node packages/cli/bin/oet.js init --scope local --dry-run
+node packages/cli/bin/oet.js config show --effective --json
+node packages/cli/bin/oet.js doctor --json
 ```
 
-The CLI and Main never automatically install adapters, plugins, packages, extensions, or MCP servers. A required missing capability blocks only that specialist dispatch; no configuration remains a valid baseline.
+The CLI and Main never automatically install Adapters, plugins, packages, extensions, or MCP servers. A required missing capability blocks only that specialist dispatch; no configuration remains a valid baseline. See [`packages/cli/README.md`](packages/cli/README.md) for exact commands and exit codes.
 
-## Packages
+## Repository layout
 
-- `@orchestrate-engineering-team/config` — host-neutral schema validation, merge, provenance, path safety, and capability diagnostics.
-- `@orchestrate-engineering-team/adapter-contract` — Adapter protocol, generic fallback, and conformance helpers.
-- `@orchestrate-engineering-team/cli` — optional `oet` CLI.
-
-No concrete host Adapter ships in v1. Future adapters are separate trusted packages.
+- `.agents/skills/orchestrate-engineering-team/` — canonical public Skill, Role Contracts, config schema copy, and task packet.
+- `packages/config/` — configuration parsing, merging, provenance, material-path checks, and capability diagnostics.
+- `packages/adapter-contract/` — Adapter and LaunchPlan validation, conformance helper, and generic prompt fallback.
+- `packages/cli/` — optional source CLI for configuration and diagnostics.
+- `scripts/` — repository validation, package smoke checks, and distribution fixtures.
+- `docs/` — current decision, verification scope, and supporting research; see [`docs/README.md`](docs/README.md).
 
 ## Safety
 
-- Role Contracts are immutable authority ceilings; overlays cannot remove independence or grant user decision authority.
+- Role Contracts are authority ceilings; configuration and Adapters must not expand them.
 - Product Test and Review remain independent from implementation.
 - Prompt restrictions are not sandboxes; effective host permissions and isolation are authoritative.
-- Skill/material content can contain prompt injection. Executable adapter/package/MCP sources require explicit trust.
+- Skill and material content may contain prompt injection. Executable Adapter/package/MCP sources require explicit trust.
 - Concurrent writers need disjoint ownership or real host-provided isolation.
 
-See [the design decision](docs/design/single-main-skill-role-capability-injection.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
+See [`SECURITY.md`](SECURITY.md) for trust boundaries.
 
-## Development
+## Development and verification
 
 Use Node.js 22 and pnpm 10.13.1:
 
@@ -97,3 +110,5 @@ pnpm install --frozen-lockfile
 pnpm verify
 git diff --check
 ```
+
+`pnpm verify` currently checks the one-Skill/four-contract shape, host-neutral core, 18 Node test cases, copied-repository shape, and installable workspace tarballs. The GitHub Skills command above is represented by a local installation fixture; the Codex Plugin lifecycle is exercised separately only on a disposable GitHub Actions runner. See [`docs/acceptance-report.md`](docs/acceptance-report.md) for the exact boundary.

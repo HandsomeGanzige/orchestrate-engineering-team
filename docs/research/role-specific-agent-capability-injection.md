@@ -4,7 +4,7 @@
 > 范围：Pi、Anthropic Claude Code、OpenAI Codex、Google Gemini CLI、Agent Skills 与 MCP 的官方文档/源码。  
 > 说明：本文把可由一手资料直接确认的内容标为“**已验证事实**”，把跨产品推论标为“**综合判断**”，把本项目可采取的方向标为“**建议**”。没有官方依据的行为明确标为“**未确认**”。
 >
-> **设计更新：** 本文记录了方案形成前的研究背景。最终产品不再以四个公开 Role Skill 作为语义源；角色身份现在来自 Main Skill 内部不可变的 canonical Role Contract，专业 Skill 仅作为用户可配置能力。最终决策见 `docs/design/single-main-skill-role-capability-injection.md`。
+> **设计更新：** 本文记录了方案形成前的研究背景，正文保留了当时的仓库审计和已被否决的候选方案，不是当前实现说明。最终产品不再以四个公开 Role Skill 作为语义源；角色身份现在来自 Main Skill 内部不可变的 canonical Role Contract，专业 Skill 仅作为用户可配置能力。当前事实以 `README.md`、`docs/acceptance-report.md` 和 `docs/design/single-main-skill-role-capability-injection.md` 为准。
 
 ## 摘要
 

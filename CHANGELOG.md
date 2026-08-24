@@ -2,9 +2,11 @@
 
 Notable changes are recorded chronologically. Updates replace the current workflow contract directly; old formats and upgrade paths are not retained.
 
-## Current
+## Current repository state
 
-### v1.0.0
+### v1.0.0 (unreleased workspace version)
+
+The package manifests use `1.0.0`, but the repository currently has no release tag or npm publication workflow. The scoped workspace packages are validated from local tarballs and should not yet be documented as registry-installed packages.
 
 - Replaced five public Skills with one `orchestrate-engineering-team` Skill and four immutable internal Role Contracts; no compatibility shims are retained.
 - Added user/project/local/task capability configuration with strict merging, provenance, safe material paths, required/optional behavior, and no-configuration fallback.

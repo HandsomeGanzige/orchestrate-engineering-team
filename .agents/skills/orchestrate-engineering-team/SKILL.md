@@ -54,7 +54,7 @@ When explicitly asked to “configure the engineering team”, strengthen a role
 5. Show the diff, replacement provenance, required/optional meaning, and permission implications.
 6. Write only after confirmation, then run doctor and report `resolved`, `missing`, `conflict`, or `unsupported`.
 
-Prefer the optional `oet` CLI when installed: `oet config show --effective --json`, `oet config apply`, and `oet doctor`. Never run `npx --yes` automatically. If the CLI is absent, provide `npm install --global @orchestrate-engineering-team/cli` and may prepare an unverified draft; do not claim it was validated.
+Prefer the optional `oet` CLI when it is already available: `oet config show --effective --json`, `oet config apply`, and `oet doctor`. Never run `npx --yes` automatically. The CLI package is currently source-only in this repository, so do not claim a global npm installation path exists. If the CLI is absent, prepare an unverified draft or point to the repository source; do not claim it was validated.
 
 ## Deliver one coherent outcome
 

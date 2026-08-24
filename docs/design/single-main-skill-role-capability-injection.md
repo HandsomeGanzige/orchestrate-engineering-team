@@ -1,29 +1,32 @@
 # Single Main Skill and configurable role capability injection
 
+**Status:** accepted and implemented in the current `1.0.0` workspace.
+
 ## Decision
 
 The product publishes one discoverable Skill: `orchestrate-engineering-team`. Architecture, Development, Product Test, and Review are stable internal Role Contracts. Professional Skills are optional capabilities attached by configuration; packages/plugins are distribution sources; host Adapters translate a resolved role into native launch settings.
 
-This is a breaking replacement for the former five-Skill design. There are no compatibility shims.
+This replaces the former five-Skill design. There are no compatibility shims.
 
 ## Terms and layers
 
-- **Role Contract**: immutable purpose, routing, authority ceiling, independence, capability intent, context, and returns in `references/role-contracts.yaml`.
-- **Professional capability**: an installed Skill or a safe material reference that improves domain work without defining role identity.
+- **Role Contract**: immutable purpose, routing, authority ceiling, independence, capability intent, context, and returns in `.agents/skills/orchestrate-engineering-team/references/role-contracts.yaml`.
+- **Professional capability**: an installed Skill or safe material reference that improves domain work without defining role identity.
 - **Adapter**: trusted executable host integration implementing detect, binding validation, resolve, optional scaffold, and diagnose.
-- **Resolved Role**: one dispatch request containing contract, focused task, capability status/provenance, host launch facts, and limitations.
+- **Resolved role request**: the focused task, selected contract, resolved capability status/provenance, host facts, and known limitations assembled for one dispatch.
+- **LaunchPlan**: the Adapter contract's validated host launch fields: Adapter, Agent, mode, tools policy, sandbox, isolation, limitations, and optional granted capabilities/prompt.
 
-Main alone decides whether and how to delegate and synthesizes results. Adapters cannot expand canonical authority or coordinate workflow.
+Main alone decides whether and how to delegate and synthesizes results. Adapters cannot expand canonical authority or coordinate the overall task.
 
 ## Configuration
 
-Configuration uses `apiVersion: orchestrate-engineering-team/v1` at, from lowest to highest precedence:
+Persistent configuration uses `apiVersion: orchestrate-engineering-team/v1` at, from lowest to highest precedence:
 
 1. `~/.agents/orchestrate-engineering-team.yaml`
 2. `.agents/orchestrate-engineering-team.yaml`
 3. `.agents/orchestrate-engineering-team.local.yaml`
-4. ephemeral task additions
-5. host permission/capability ceiling
+
+Main may add ephemeral task-specific capabilities after those files and before the host permission ceiling. The config package and CLI load only the three persistent files; task additions are not persisted by the CLI.
 
 Only `architecture`, `development`, `product-test`, and `review` are accepted. Capability items have stable IDs. Different IDs append; a higher layer replaces the complete item with the same ID; `enabled: false` disables it. Unknown portable fields, duplicate IDs, and unsafe private YAML values fail validation.
 
@@ -47,39 +50,41 @@ roles:
           agent: team-development
 ```
 
-Project materials must be relative and remain inside the real project root after symlink resolution. External user materials require a user-layer entry with `scope: user`. Required missing capabilities block that specialist; optional missing capabilities become visible limitations. No configuration is a valid, quiet baseline.
+Project materials must be relative and remain inside the real project root after symlink resolution. External user materials require a user-layer entry with `scope: user`. Required missing capabilities block that specialist; optional missing capabilities become visible limitations. No configuration is a valid baseline.
 
 ## Dispatch and fallback
 
-An Adapter implements `detect`, `validateBinding`, `resolve`, and `diagnose`; `scaffold` is optional. It returns native Agent, mode, effective or unknown tools policy, sandbox, isolation, capabilities, provenance, and limitations. The v1 core ships only the protocol, fixtures, conformance helper, and generic fallback—not Pi, Claude Code, Codex, or Gemini adapters.
+An Adapter implements `detect`, `validateBinding`, `resolve`, and `diagnose`; `scaffold` is optional. `resolve` returns a LaunchPlan and `diagnose` reports at least a limitations array. The current core ships only the protocol, fixtures, conformance helper, and generic fallback—not Pi, Claude Code, Codex, or Gemini adapters.
 
-Without an Adapter, Main injects a compact Role Contract, focused task, exact resolved Skill references, and materials into the host's normal subagent prompt. It does not copy the whole parent conversation or silently claim enforcement.
+Without an Adapter, Main builds a compact prompt from the Role Contract, focused task, exact resolved Skill references, and materials, then uses the host's normal subagent mechanism. It does not copy the whole parent conversation or claim unverified enforcement.
 
 ## Interaction and CLI
 
 Explicit team configuration first shows effective values/provenance, asks scope and role, records capabilities/bindings, warns about executable trust, displays a diff, asks confirmation, writes, then runs doctor. Normal delegation never forces setup.
 
-The optional `@orchestrate-engineering-team/cli` exposes `oet init`, `configure`, `config show/apply`, `doctor`, and `schema`. Writes support dry-run; existing files require explicit overwrite; local init maintains `.gitignore`. The CLI never installs an Adapter or follows a package locator. Main must not invoke `npx --yes` automatically.
+The source CLI at `packages/cli/bin/oet.js` exposes `init`, `configure`, `config show`, `config apply`, `doctor`, and `schema`. Init/apply support dry-run; apply requires `--yes` before overwriting an existing file; the interactive configure command previews its diff and asks before writing. Local writes maintain `.gitignore`. The CLI never installs an Adapter or follows a package locator.
+
+The package manifest is versioned `1.0.0`, but this repository currently has no npm publication workflow or release tag. Documentation must not present `npm install --global @orchestrate-engineering-team/cli` as an available installation path until publication exists.
 
 ## Security and observability
 
-Skills and materials are untrusted prompt input. Adapter/package/plugin/MCP code is executable supply chain and requires explicit installation and trust. A package existing does not prove per-role isolation. The host sandbox and permissions are authoritative.
+Skills and materials are untrusted prompt input. Adapter/package/plugin/MCP code is executable supply chain and requires explicit installation and trust. Package presence does not prove per-role isolation. The host sandbox and permissions are authoritative.
 
 Required missing items, source conflicts, prompt fallback, requested/effective permission mismatch, and unmet executable trust must be visible. Summaries never include secrets, complete environment variables, hidden reasoning, or sensitive MCP data.
 
-## Repository shape and extension
+## Repository shape
 
-- `.agents/skills/orchestrate-engineering-team/`: the only public Skill, contracts, schema, and request packet.
-- `packages/config`: pure validation, merging, provenance, path safety, and diagnostics.
-- `packages/adapter-contract`: protocol, launch-plan validation, generic fallback, and conformance helper.
-- `packages/cli`: optional configuration/doctor tool.
+- `.agents/skills/orchestrate-engineering-team/`: only public Skill, contracts, schema copy, and request packet.
+- `packages/config`: validation, persistent layer merging, provenance, path safety, and diagnostics.
+- `packages/adapter-contract`: protocol, LaunchPlan validation, generic fallback, and conformance helper.
+- `packages/cli`: optional source configuration/doctor tool.
 
-Future host support belongs in separately trusted packages such as `@orchestrate-engineering-team/adapter-pi` and must pass conformance tests without owning role semantics.
+The two config schema copies are intentionally identical and checked by `pnpm check:host-neutral`.
 
 ## Rejected alternatives
 
 - Four public Role Skills: confuses role identity with optional expertise and pollutes discovery.
 - Compatibility shims: preserve the wrong public model.
-- Automatic adapter/package/MCP installation: violates executable trust and reproducibility.
+- Automatic Adapter/package/MCP installation: violates executable trust and reproducibility.
 - Host-specific core: makes one vendor's capability model canonical.
 - Reintroducing workflow state/runtime: unnecessary for role resolution and contrary to host-native dispatch.

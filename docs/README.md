@@ -18,6 +18,7 @@ The executable product contract lives in `.agents/skills/orchestrate-engineering
 
 ## Supporting research
 
+- [`research/context-exhaustion-continuity-goal-drift.md`](research/context-exhaustion-continuity-goal-drift.md)
 - [`research/multi-agent-coordination-state-machines.md`](research/multi-agent-coordination-state-machines.md)
 - [`research/role-specific-agent-capability-injection.md`](research/role-specific-agent-capability-injection.md)
 

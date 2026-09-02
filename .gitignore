@@ -12,5 +12,6 @@ docs/design/*
 !docs/research/
 docs/research/*
 !docs/research/multi-agent-coordination-state-machines.md
+!docs/research/context-exhaustion-continuity-goal-drift.md
 !docs/research/role-specific-agent-capability-injection.md
 .agents/orchestrate-engineering-team.local.yaml

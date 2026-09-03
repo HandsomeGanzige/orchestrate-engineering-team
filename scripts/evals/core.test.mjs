@@ -24,7 +24,7 @@ function manifest(id = "sample-case") {
     checks: [
       { id: "result-file", type: "file", path: "result.txt", exists: true, contains: ["done"] },
       { id: "allowed-change", type: "changed-paths", allow: ["result.txt"], require: ["result.txt"] },
-      { id: "event-visible", type: "event", pattern: "command_execution", minMatches: 1 },
+      { id: "event-visible", type: "event", itemType: "command_execution", pattern: "write result", minMatches: 1 },
     ],
     judge: { rubricFile: "rubric.md", threshold: 80, criticalCriteria: ["contract"] },
   };
@@ -66,6 +66,7 @@ test("judge validation enforces score threshold and every critical criterion", (
   assert.equal(passing.passed, true);
   const failing = validateJudgeResult({ ...raw, score: 100, criteria: [{ ...raw.criteria[0], passed: false }] }, evalCase);
   assert.equal(failing.passed, false);
+  assert.equal(validateJudgeResult({ ...raw, violations: ["non-critical reporting shortcoming"] }, evalCase).passed, true);
 });
 
 test("Codex runner terminates a timed-out process", async () => {

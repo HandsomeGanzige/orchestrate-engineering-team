@@ -8,8 +8,8 @@
   "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
   "environment": { "blockedCommands": [] },
   "checks": [
-    { "id": "architecture-dispatched", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 1 },
-    { "id": "architecture-role-evidence", "type": "event", "pattern": "architecture", "minMatches": 1 },
+    { "id": "architecture-dispatched", "type": "event", "itemType": "collab_tool_call", "tool": "wait", "pattern": "collab_tool_call", "minMatches": 2 },
+    { "id": "architecture-role-evidence", "type": "event", "itemType": "agent_message", "pattern": "architecture", "minMatches": 1 },
     { "id": "strict-write-scope", "type": "changed-paths", "allow": ["docs/adr/0002-api-cache.md", "docs/README.md", ".agent-work/**"], "require": ["docs/adr/0002-api-cache.md", "docs/README.md"] },
     { "id": "adr-content", "type": "file", "path": "docs/adr/0002-api-cache.md", "contains": ["Accepted", "Scope", "Rationale", "Invariants", "Compatibility", "src/api-client.js", "test/api-client.test.js", "Supersedes"] },
     { "id": "adr-discoverable", "type": "file", "path": "docs/README.md", "contains": ["adr/0002-api-cache.md"] },

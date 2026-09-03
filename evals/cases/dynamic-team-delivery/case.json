@@ -10,8 +10,8 @@
   "checks": [
     { "id": "behavior-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
     { "id": "implementation-delivered", "type": "changed-paths", "allow": ["src/**", "test/**", "README.md", ".agent-work/**"], "require": ["src/**"] },
-    { "id": "specialist-used", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 1 },
-    { "id": "known-roles-only", "type": "event", "pattern": "project.manager|scrum.master|mandatory.phase|lifecycle.stage", "minMatches": 0, "maxMatches": 0 }
+    { "id": "specialist-used", "type": "event", "itemType": "collab_tool_call", "tool": "wait", "pattern": "collab_tool_call", "minMatches": 2 },
+    { "id": "known-roles-only", "type": "final", "pattern": "project.manager|scrum.master|mandatory.phase|lifecycle.stage", "minMatches": 0, "maxMatches": 0 }
   ],
   "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["compatibility", "valuable-specialists", "main-integration"] }
 }

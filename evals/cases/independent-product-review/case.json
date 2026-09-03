@@ -10,9 +10,9 @@
   "checks": [
     { "id": "behavior-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
     { "id": "defect-fixed", "type": "changed-paths", "allow": ["src/**", "test/**", ".agent-work/**"], "require": ["src/preferences.js"] },
-    { "id": "product-test-context", "type": "event", "pattern": "product[- _]?test|Product Test", "minMatches": 1 },
-    { "id": "review-context", "type": "event", "pattern": "(?:^|[^a-z])review(?:[^a-z]|$)", "minMatches": 1 },
-    { "id": "multiple-specialist-launches", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 3 }
+    { "id": "product-test-context", "type": "event", "itemType": "agent_message", "pattern": "product[- _]?test|Product Test", "minMatches": 1 },
+    { "id": "review-context", "type": "event", "itemType": "agent_message", "pattern": "(?:^|[^a-z])review(?:[^a-z]|$)", "minMatches": 1 },
+    { "id": "multiple-specialist-launches", "type": "event", "itemType": "collab_tool_call", "tool": "wait", "pattern": "collab_tool_call", "minMatches": 6 }
   ],
   "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["product-test-independent", "review-independent", "defect-closed"] }
 }

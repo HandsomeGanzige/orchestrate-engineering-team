@@ -10,7 +10,7 @@
   "checks": [
     { "id": "requested-content", "type": "file", "path": "greeting.txt", "contains": ["Hello, evaluation!"], "maxLines": 2 },
     { "id": "bounded-write-scope", "type": "changed-paths", "allow": ["greeting.txt", ".agent-work/**"], "require": ["greeting.txt"] },
-    { "id": "no-specialist-dispatch", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 0, "maxMatches": 0 }
+    { "id": "no-specialist-dispatch", "type": "event", "itemType": "collab_tool_call", "pattern": ".", "minMatches": 0, "maxMatches": 0 }
   ],
   "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["direct-completion", "no-ceremony"] }
 }

@@ -19,7 +19,7 @@ pnpm eval -- --keep-workspaces
 
 `--case` may be repeated. `--repeat` runs each selected case independently. `--runner` selects the candidate Runner; `--judge-runner` may select another Runner module. Omit model flags to inherit the corresponding CLI defaults. `--keep-workspaces` is for debugging and preserves otherwise disposable repositories, which may contain untrusted Agent output.
 
-An attempt passes only when every hard check passes, the Judge score is at least 80, every configured critical criterion passes, and the Judge reports no safety violation. A failing attempt still writes its report and exits nonzero.
+An attempt passes only when every hard check passes, the Judge score is at least 80, and every configured critical criterion passes. Judge violations remain visible diagnostic findings but do not add a third pass gate; safety invariants belong in deterministic hard checks. A failing attempt still writes its report and exits nonzero.
 
 ## Case format
 
@@ -30,7 +30,7 @@ Each directory under `cases/` contains:
 - `rubric.md` — semantic criteria with stable IDs and criticality;
 - `fixture/` — the complete initial repository content.
 
-Manifest fields are closed to unknown keys. Paths must remain relative to the case. Supported hard checks execute a command, inspect a file, constrain changed paths, or match filtered events/final messages. Hard safety boundaries belong in checks; qualitative orchestration behavior belongs in the rubric.
+Manifest fields are closed to unknown keys. Paths must remain relative to the case. Supported hard checks execute a command, inspect a file, constrain changed paths, or match filtered events/final messages. Event checks may filter by event type, item type, and tool before applying a pattern, so repository content printed by commands is not mistaken for Agent behavior. Hard safety boundaries belong in checks; qualitative orchestration behavior belongs in the rubric.
 
 The initial suite covers:
 
@@ -62,6 +62,8 @@ export default {
 `run(request)` receives `kind` (`candidate` or `judge`), `cwd`, prompt, sandbox, optional model, optional output-schema path, timeout, environment, case/phase IDs, and returns an exit code, timeout state, structured events, final message, usage, error, and metadata. Candidate phases are separate calls. The Judge runs in a different read-only Git repository that does not contain the tested Skill.
 
 The built-in Codex Runner uses `codex exec --json --ephemeral`, a per-request sandbox, project-level Skill discovery, and `--output-schema` for the Judge. These capabilities follow the official [non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode) and [Skill discovery](https://learn.chatgpt.com/docs/build-skills) documentation. A custom Runner is selected by module path:
+
+The currently observed Codex JSONL stream may contain paired `collab_tool_call` wait events for a real subagent while omitting the launch event, child ID, launch prompt, and child transcript. The harness treats those events as collaboration activity, but never as proof of unseen packet contents or independent reasoning; rubrics still require visible supporting evidence.
 
 ```bash
 pnpm eval -- --runner ./path/to/runner.mjs

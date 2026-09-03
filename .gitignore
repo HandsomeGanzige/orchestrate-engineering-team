@@ -1,5 +1,6 @@
 .DS_Store
 .agent-work/
+evals/.runs/
 coverage/
 node_modules/
 .pnpm-store/

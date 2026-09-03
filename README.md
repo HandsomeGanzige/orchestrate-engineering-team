@@ -91,7 +91,8 @@ The CLI and Main never automatically install Adapters, plugins, packages, extens
 - `packages/config/` — configuration parsing, merging, provenance, material-path checks, and capability diagnostics.
 - `packages/adapter-contract/` — Adapter and LaunchPlan validation, conformance helper, and generic prompt fallback.
 - `packages/cli/` — optional source CLI for configuration and diagnostics.
-- `scripts/` — repository validation, package smoke checks, and distribution fixtures.
+- `scripts/` — repository validation, package smoke checks, distribution fixtures, and the behavior-eval harness.
+- `evals/cases/` — ten isolated black-box Skill behavior cases; see [`evals/README.md`](evals/README.md).
 - `docs/` — current decision, verification scope, and supporting research; see [`docs/README.md`](docs/README.md).
 
 ## Safety
@@ -117,4 +118,15 @@ pnpm verify
 git diff --check
 ```
 
-`pnpm verify` currently checks the one-Skill/four-contract/four-resource shape, host-neutral core, 18 Node test cases, copied-repository shape, and installable workspace tarballs. The GitHub Skills command above is represented by a local installation fixture; the Codex Plugin lifecycle is exercised separately only on a disposable GitHub Actions runner. See [`docs/acceptance-report.md`](docs/acceptance-report.md) for the exact boundary.
+`pnpm verify` currently checks the one-Skill/four-contract/four-resource shape, host-neutral core, 27 Node test cases, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
+
+Black-box behavior evaluation is a separate manual workflow:
+
+```bash
+pnpm eval -- --list
+pnpm eval -- --runner codex --repeat 1
+```
+
+The built-in Runner requires an already authenticated Codex CLI. It copies the current Skill into a disposable Git fixture, starts independent ephemeral candidate and Judge sessions, applies deterministic safety checks, and writes filtered local evidence under ignored `evals/.runs/`. Candidate and Judge models are not fixed; explicit `--model` and `--judge-model` overrides are optional. Runs, including the first pass/fail baseline, are diagnostic local evidence rather than release proof and are not committed. See [`evals/README.md`](evals/README.md) and [`docs/acceptance-report.md`](docs/acceptance-report.md) for the exact boundaries.
+
+The GitHub Skills command above is represented by a local installation fixture; the Codex Plugin lifecycle is exercised separately only on a disposable GitHub Actions runner.

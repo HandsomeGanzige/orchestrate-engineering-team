@@ -16,6 +16,7 @@ The package manifests use `1.0.0`, but the repository currently has no release t
 - Made repository recovery and specialist self-discovery tool-neutral, with supplied paths and symbols treated as entry points rather than a complete inspection boundary.
 - Expanded Architecture from fully read-only to code-read-only with optional writes for explicitly assigned Agent materials and project documentation; unconfirmed proposals remain distinct from established rules.
 - Strengthened generic prompt fallback to carry the full compact role guidance, prohibited capabilities, document write scope, resolved capability provenance/status, effective unknown host boundaries, and actual limitations.
+- Added a manual black-box Skill behavior evaluation harness with disposable repositories, Codex and Fake Runner contracts, filtered local evidence, deterministic safety checks, independent rubric judging, and ten orchestration/continuity/Architecture cases. It is excluded from CI and `pnpm verify`, inherits user-selected models by default, and keeps first-run baselines out of version control and release evidence.
 - Updated Plugin, installer, copied-package, tarball, documentation, security, and host-neutral validation around the single-Skill release shape.
 
 ### v0.5.0

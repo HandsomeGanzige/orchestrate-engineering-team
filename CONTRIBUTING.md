@@ -27,3 +27,5 @@ Update tests for role contract/schema behavior, continuity resources, Architectu
 Keep documentation claims within the boundaries recorded in `docs/acceptance-report.md`: local Skill installation is a copied fixture, concrete host Adapters do not ship, and workspace packages are not registry-installed until a publication path exists. Update `README.md`, package READMEs, the acceptance report, design decision, and changelog when those facts change.
 
 For security-sensitive changes, distinguish advisory prompt restrictions from effective host sandbox/tool enforcement and avoid recording secrets or hidden reasoning.
+
+Behavior cases under `evals/cases/` combine deterministic safety checks with an independent semantic rubric. Run `pnpm eval -- --list` to inspect them and use `pnpm eval -- --runner codex --repeat 1` only when a manual, authenticated model run is intended. Never add it to CI or `pnpm verify`, pin a model as the repository default, or commit `evals/.runs/`. Preserve a failed first run as the local baseline; correct harness, fixture, or clear hard-check mistakes before considering a separate Skill-tuning change.

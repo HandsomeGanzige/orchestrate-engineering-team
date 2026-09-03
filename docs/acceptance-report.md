@@ -19,7 +19,7 @@ The Main Skill behavior checks are static contract checks. They confirm required
 
 ## Verified library and CLI behavior
 
-The current 27 Node test cases cover:
+The current 28 Node test cases cover:
 
 - strict config parsing, layer replacement/disable behavior, provenance, required/optional Skill diagnosis, and material traversal/symlink rejection;
 - Adapter shape and LaunchPlan validation, authority-expansion rejection, and generic prompt fallback that includes professional guidance, prohibited capabilities, document scope, resolved references, host-boundary unknowns, and actual limitations;

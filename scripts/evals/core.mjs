@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
-import { access, chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -299,7 +299,9 @@ export async function runAttempt({ evalCase, attempt, runner, judgeRunner = runn
     const environment = { ...process.env, ...(blockedDirectory ? { PATH: `${blockedDirectory}${path.delimiter}${process.env.PATH}` } : {}) };
     const skillPath = path.join(installedSkillRoot, "SKILL.md");
     const preflight = await runner.preflight({ workspace, skillPath, environment, timeoutMs: Math.min(evalCase.timeoutMs, 30_000) });
-    if (!(preflight.skillPaths ?? []).map((item) => path.resolve(item)).includes(path.resolve(skillPath))) throw new Error("Runner preflight did not confirm the repository-scoped Skill path");
+    const expectedSkillPath = await realpath(skillPath);
+    const preflightSkillPaths = await Promise.all((preflight.skillPaths ?? []).map(async (item) => { try { return await realpath(item); } catch { return path.resolve(item); } }));
+    if (!preflightSkillPaths.includes(expectedSkillPath)) throw new Error("Runner preflight did not confirm the repository-scoped Skill path");
     const baseline = await snapshotTree(workspace);
     const baselineSpecial = new Map();
     for (const file of [".gitignore", ".git/info/exclude"]) {

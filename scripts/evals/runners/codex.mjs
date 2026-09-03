@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, realpath } from "node:fs/promises";
 import path from "node:path";
 
 const MAX_CAPTURE = 20_000_000;
@@ -64,6 +64,31 @@ function usage(events) {
   return null;
 }
 
+function regexpEscape(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+export function discoverPromptSkillPaths(source, skillName) {
+  let parsed;
+  try { parsed = JSON.parse(source); } catch { return []; }
+  const texts = [];
+  const visit = (value) => {
+    if (typeof value === "string") texts.push(value);
+    else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === "object") Object.values(value).forEach(visit);
+  };
+  visit(parsed);
+  const roots = new Map();
+  for (const text of texts) {
+    for (const match of text.matchAll(/^- `([^`]+)` = `([^`]+)`$/gm)) roots.set(match[1], match[2]);
+  }
+  const references = [];
+  const pattern = new RegExp(`^- ${regexpEscape(skillName)}: .*?\\(file: ([^)]+)\\)$`, "gm");
+  for (const text of texts) for (const match of text.matchAll(pattern)) references.push(match[1]);
+  return references.map((reference) => {
+    const [prefix, ...rest] = reference.split("/");
+    return roots.has(prefix) ? path.join(roots.get(prefix), ...rest) : path.resolve(reference);
+  });
+}
+
 export function createCodexRunner({ executable = process.env.OET_CODEX_BIN ?? "codex" } = {}) {
   return {
     id: "codex",
@@ -76,7 +101,10 @@ export function createCodexRunner({ executable = process.env.OET_CODEX_BIN ?? "c
       const promptResult = await runProcess(executable, ["debug", "prompt-input", "Use $orchestrate-engineering-team."], { cwd: workspace, environment, timeoutMs });
       if (promptResult.exitCode !== 0) throw new Error(`codex debug prompt-input failed: ${promptResult.stderr.trim()}`);
       const normalizedSkillPath = path.resolve(skillPath);
-      if (!promptResult.stdout.includes(normalizedSkillPath) && !promptResult.stdout.includes(skillPath)) throw new Error(`repository Skill was not visible in Codex prompt input: ${normalizedSkillPath}`);
+      const resolvedSkillPath = await realpath(skillPath);
+      const discoveredSkillPaths = discoverPromptSkillPaths(promptResult.stdout, "orchestrate-engineering-team");
+      const discoveredRealPaths = await Promise.all(discoveredSkillPaths.map(async (file) => { try { return await realpath(file); } catch { return path.resolve(file); } }));
+      if (!discoveredRealPaths.includes(resolvedSkillPath)) throw new Error(`repository Skill was not visible in Codex prompt input: ${normalizedSkillPath}`);
       return {
         runner: "codex",
         version: versionResult.stdout.trim() || versionResult.stderr.trim(),
@@ -85,7 +113,7 @@ export function createCodexRunner({ executable = process.env.OET_CODEX_BIN ?? "c
           structuredOutput: true,
           multiAgent: /^multi_agent\s+.*\btrue$/m.test(featureResult.stdout) || /^multi_agent_v2\s+.*\btrue$/m.test(featureResult.stdout),
         },
-        skillPaths: [normalizedSkillPath],
+        skillPaths: discoveredSkillPaths,
       };
     },
     async run({ kind, cwd, prompt, sandbox = "workspace-write", model, outputSchema, timeoutMs = 600_000, environment = process.env }) {

@@ -118,7 +118,7 @@ pnpm verify
 git diff --check
 ```
 
-`pnpm verify` currently checks the one-Skill/four-contract/four-resource shape, host-neutral core, 27 Node test cases, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
+`pnpm verify` currently checks the one-Skill/four-contract/four-resource shape, host-neutral core, 28 Node test cases, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
 
 Black-box behavior evaluation is a separate manual workflow:
 

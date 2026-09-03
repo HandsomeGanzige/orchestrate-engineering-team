@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { constants, discoverCases, filterEvents, runSuite, validateCaseManifest, validateJudgeResult } from "./core.mjs";
-import { createCodexRunner } from "./runners/codex.mjs";
+import { createCodexRunner, discoverPromptSkillPaths } from "./runners/codex.mjs";
 import { createFakeRunner } from "./runners/fake.mjs";
 import { parseArguments } from "./run.mjs";
 
@@ -78,6 +78,12 @@ test("Codex runner terminates a timed-out process", async () => {
     assert.equal(result.timedOut, true);
     assert.notEqual(result.exitCode, 0);
   } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
+test("Codex preflight resolves a project Skill through the prompt root alias", () => {
+  const prompt = [{ type: "message", content: [{ type: "input_text", text: "### Skill roots\n- `r8` = `/private/var/folders/example/workspace/.agents/skills`\n### Available skills\n- orchestrate-engineering-team: Coordinate roles. (file: r8/orchestrate-engineering-team/SKILL.md)" }] }];
+  assert.deepEqual(discoverPromptSkillPaths(JSON.stringify(prompt), "orchestrate-engineering-team"), ["/private/var/folders/example/workspace/.agents/skills/orchestrate-engineering-team/SKILL.md"]);
+  assert.deepEqual(discoverPromptSkillPaths(JSON.stringify(prompt), "not-present"), []);
 });
 
 test("fake runner exercises isolated workspace, hard checks, judge, and reports", async () => {

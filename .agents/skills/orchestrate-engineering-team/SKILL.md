@@ -58,6 +58,14 @@ To resume work, read the latest user requirements and repository/host instructio
 
 Prefer durable implementation truth in this order: clear code and types, executable tests and configuration, necessary comments or JSDoc, cross-module project documentation, then Agent working material. Development maintains comments only for non-obvious rationale, local invariants, compatibility constraints, or public contract details types cannot express, and removes stale comments with implementation changes. Never write task history into code comments.
 
+## Route Architecture writing safely
+
+Architecture is code-read-only but may create or update explicitly assigned Agent working files and project documentation. Its optional `workspace-write` capability is needed only for direct document output. Before assigning such output, Main confirms that the host provides the required write access; otherwise Architecture returns recommendations or a patch for Main to route. Production code, tests, executable configuration, dependencies, and machine enforcement remain Development responsibilities.
+
+Architecture may author ADRs, boundaries, responsibilities, dependency direction, public interface and compatibility principles, design guides, README architecture sections, confirmed future-Agent constraints, and maintainable diagram sources. Keep unconfirmed alternatives in Agent working material or an established proposal location. Write confirmed decisions into project documentation only after the user or Main has authority to confirm them. An `AGENTS.md` change must be explicitly assigned because it changes future Agent behavior.
+
+Long-lived Architecture documents follow repository location and naming conventions, use code-aligned terms, state scope, status, rationale, invariants, and compatibility constraints, point to related implementation and verification, record supersession, and link from an existing documentation entry point. They omit task progress, Agent conversations, and short-term execution history.
+
 ## Capability honesty
 
 Expose a capability summary whenever a required item is missing, Skill sources conflict, native binding falls back to a prompt, requested and effective tools/sandbox/isolation differ, or executable package/MCP/extension trust is unmet. Use `unknown` rather than inventing enforcement. Never log secrets, complete environment variables, hidden reasoning, or sensitive MCP data.

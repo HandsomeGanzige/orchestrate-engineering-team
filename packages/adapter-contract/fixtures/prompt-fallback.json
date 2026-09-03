@@ -1,4 +1,53 @@
 {
-  "request": { "role": "review", "focusedTask": "inspect the change" },
-  "expectedMode": "prompt-fallback"
+  "request": {
+    "role": "architecture",
+    "contract": {
+      "purpose": "compare designs",
+      "route": "use for consequential decisions",
+      "authority": "write assigned documentation only",
+      "writeScope": "assigned-agent-work-files-and-project-documentation",
+      "independence": "independent",
+      "capabilities": {
+        "prohibited": ["production-code-write", "test-write"]
+      },
+      "prompt": "Keep proposals distinct from established project rules.",
+      "returns": ["recommendation", "assigned-document-output"]
+    },
+    "focusedTask": "inspect the module boundary",
+    "capabilities": {
+      "skills": [
+        {
+          "id": "systems",
+          "ref": "/skills/systems/SKILL.md",
+          "required": true,
+          "status": "resolved",
+          "source": "project"
+        }
+      ],
+      "materials": [
+        {
+          "id": "adr",
+          "path": "docs/adr/0001.md",
+          "status": "resolved",
+          "source": "project"
+        }
+      ]
+    },
+    "limitations": ["workspace-write unavailable"]
+  },
+  "expectedMode": "prompt-fallback",
+  "expectedPromptIncludes": [
+    "inspect the module boundary",
+    "Write scope: assigned-agent-work-files-and-project-documentation",
+    "production-code-write, test-write",
+    "Keep proposals distinct",
+    "/skills/systems/SKILL.md",
+    "docs/adr/0001.md",
+    "workspace-write unavailable",
+    "toolsPolicy=unknown"
+  ],
+  "expectedLimitations": [
+    "No native adapter verified effective capabilities",
+    "workspace-write unavailable"
+  ]
 }

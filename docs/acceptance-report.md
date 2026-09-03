@@ -7,9 +7,11 @@ This report describes the checks present in the repository. It is not evidence o
 `pnpm verify` checks that:
 
 - `.agents/skills/` contains only `orchestrate-engineering-team`;
-- the Main Skill contains the three supporting resources plus `SKILL.md` and Codex UI metadata;
+- the Main Skill contains four supporting resources plus `SKILL.md` and Codex UI metadata, including the Main work-brief template;
 - exactly four internal Role Contracts exist: architecture, development, product-test, and review;
 - former public Role Skill directories are rejected;
+- Main continuity instructions preserve `.agent-work` as non-authoritative working material, require the work-brief sections, and use tool-neutral discovery language;
+- Architecture has optional `workspace-write` only for assigned Agent working files and project documentation while production code, tests, executable configuration, dependencies, user decisions, and overall coordination remain prohibited;
 - the Skill config schema and package config schema remain byte-identical;
 - host-neutral core files do not contain the host-specific references prohibited by the static check.
 
@@ -20,9 +22,9 @@ The Main Skill behavior checks are static contract checks. They confirm required
 The current 18 Node test cases cover:
 
 - strict config parsing, layer replacement/disable behavior, provenance, required/optional Skill diagnosis, and material traversal/symlink rejection;
-- Adapter shape and LaunchPlan validation, authority-expansion rejection, and generic prompt fallback;
+- Adapter shape and LaunchPlan validation, authority-expansion rejection, and generic prompt fallback that includes professional guidance, prohibited capabilities, document scope, resolved references, host-boundary unknowns, and actual limitations;
 - CLI local init, apply/show JSON, required-missing and Adapter-unavailable exit codes;
-- copied-repository shape and local one-Skill installation fixtures.
+- copied-repository shape and local one-Skill installation fixtures, including all four Main resources.
 
 Package smoke tests pack `config`, `adapter-contract`, and `cli`, install their tarballs into a clean temporary directory, run CLI help, and reject test or `node_modules` content in the tarballs.
 
@@ -39,6 +41,7 @@ The `smoke:skill-install` check is a local copied fixture. It validates the inst
 - No npm publish workflow or release tag is present; workspace packages are currently source packages.
 - Ephemeral task additions are assembled by Main for a dispatch; they are not a persisted CLI config layer.
 - Prompt restrictions remain advisory and are not operating-system enforcement.
+- `.agent-work` is optional Agent material, not authoritative state, and the Skill does not decide its Git ignore or commit policy.
 
 ## Reproduce
 

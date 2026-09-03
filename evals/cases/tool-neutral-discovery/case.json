@@ -1,0 +1,16 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "tool-neutral-discovery",
+  "title": "Tool-neutral repository discovery",
+  "description": "With ripgrep intentionally unavailable and the defect outside the named entry file, the Agent must use another repository capability and still verify the fix.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": ["rg"] },
+  "checks": [
+    { "id": "behavior-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
+    { "id": "found-real-implementation", "type": "changed-paths", "allow": ["src/**", "test/**", ".agent-work/**"], "require": ["src/lib/slug.js"] },
+    { "id": "alternative-discovery-evidence", "type": "event", "itemType": "command_execution", "pattern": "intentionally unavailable|(?:^|[ /])grep(?:[ \"]|$)|(?:^|[ /])find(?:[ \"]|$)|sed -n|read_file", "minMatches": 1 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["tool-neutral", "repository-discovery", "verified-fix"] }
+}

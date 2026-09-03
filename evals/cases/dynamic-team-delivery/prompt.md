@@ -1,0 +1,3 @@
+Implement backward-compatible user-name normalization. The current API accepts `{ firstName, lastName }`. It must also accept legacy `{ name }` records, trim surrounding whitespace, collapse internal whitespace, preserve the modern format, and reject records that contain neither form. Update or add implementation tests and document the compatibility rule in the README. Existing callers must keep working.
+
+This change has user-visible and compatibility risk. Use specialist contexts only where their independent ownership or judgment materially improves the result. Main owns integration and the final answer. Do not force a predefined sequence of roles.

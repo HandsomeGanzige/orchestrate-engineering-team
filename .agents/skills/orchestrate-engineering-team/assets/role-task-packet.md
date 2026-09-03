@@ -9,7 +9,7 @@ Use this as a prompt checklist, not a required schema. Include only information 
 
 ## Context
 
-- Relevant project facts, exact files, and confirmed decisions
+- Relevant project facts, known entry files, symbols, errors or tests, and confirmed decisions; entry points are not the presumed complete scope
 - Assumptions to verify; only necessary prior findings
 - Canonical role purpose, authority, independence, prohibited capabilities, and return expectations
 
@@ -22,11 +22,13 @@ Use this as a prompt checklist, not a required schema. Include only information 
 
 Never treat package presence as proof of per-Agent capability or silently install an adapter, plugin, extension, MCP server, or package.
 
-## Scope and tools
+## Scope and discovery
 
 - Allowed reads and writes
-- Host-provided tools and real enforcement boundaries
+- Host-provided discovery, search, semantic navigation, and execution capabilities with their real enforcement boundaries
 - Integration ownership for multiple writers
+
+Independently verify the current repository with suitable host capabilities. Locate relevant code, symbols, call relationships, tests, configuration, comments, and project documentation beyond the supplied entry points when the task requires it. No particular search tool or index implementation is required.
 
 ## Independence
 

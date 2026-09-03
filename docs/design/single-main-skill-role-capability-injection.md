@@ -18,6 +18,20 @@ This replaces the former five-Skill design. There are no compatibility shims.
 
 Main alone decides whether and how to delegate and synthesizes results. Adapters cannot expand canonical authority or coordinate the overall task.
 
+## Continuity and material ownership
+
+Current user requirements and acceptance criteria are intent facts; current code, tests, configuration, diffs, and observed results are implementation facts. Main and specialists verify these sources using suitable host discovery and semantic-navigation capabilities rather than depending on a specific search command.
+
+Main may keep non-authoritative working material under `.agent-work/<task>/` and instantiate the bundled `assets/main-work-brief.md` as `brief.md`. The brief is a replaceable current snapshot for recovery pointers and open work, not a history or source of truth. `.agent-work` is not a workflow state machine, lock, queue, database, lifecycle, or quality gate. The Skill neither inspects nor changes Git ignore, exclude, or commit policy for that directory.
+
+Long-lived architecture guidance follows project documentation conventions. Implementation truth remains in code, types, tests, executable configuration, schemas, and necessary comments. User collaboration artifacts follow the user's chosen or project-established location.
+
+## Architecture documentation authority
+
+Architecture is code-read-only, not fully filesystem-read-only. Its contract permits optional `workspace-write` for explicitly assigned Agent working files and project documentation. Production code, tests, executable configuration, dependencies, user decisions, and overall coordination remain prohibited. If effective write access is unavailable, Architecture returns recommendations or a patch for Main to route.
+
+Architecture may author decisions, system boundaries, interface and compatibility principles, design guides, README architecture sections, confirmed Agent constraints, and maintainable diagram sources. Unconfirmed proposals stay in Agent working material or an established proposal directory. Established rules require confirmation within the user/Main authority, and `AGENTS.md` is writable only as an explicit assignment. Long-lived documents record status, scope, rationale, invariants, compatibility constraints, related implementation, and supersession, and are linked from an existing documentation entry point.
+
 ## Configuration
 
 Persistent configuration uses `apiVersion: orchestrate-engineering-team/v1` at, from lowest to highest precedence:
@@ -56,7 +70,7 @@ Project materials must be relative and remain inside the real project root after
 
 An Adapter implements `detect`, `validateBinding`, `resolve`, and `diagnose`; `scaffold` is optional. `resolve` returns a LaunchPlan and `diagnose` reports at least a limitations array. The current core ships only the protocol, fixtures, conformance helper, and generic fallback—not Pi, Claude Code, Codex, or Gemini adapters.
 
-Without an Adapter, Main builds a compact prompt from the Role Contract, focused task, exact resolved Skill references, and materials, then uses the host's normal subagent mechanism. It does not copy the whole parent conversation or claim unverified enforcement.
+Without an Adapter, Main builds a compact prompt from the complete role purpose, route, authority, independence, write scope, prohibited capabilities, professional guidance, focused task, exact resolved Skill/material references with status and provenance, actual limitations, returns, and explicitly unknown host boundaries. It then uses the host's normal subagent mechanism without copying the whole parent conversation or claiming unverified enforcement.
 
 ## Interaction and CLI
 
@@ -74,7 +88,7 @@ Required missing items, source conflicts, prompt fallback, requested/effective p
 
 ## Repository shape
 
-- `.agents/skills/orchestrate-engineering-team/`: only public Skill, contracts, schema copy, and request packet.
+- `.agents/skills/orchestrate-engineering-team/`: only public Skill, contracts, schema copy, request packet, and Main work-brief template.
 - `packages/config`: validation, persistent layer merging, provenance, path safety, and diagnostics.
 - `packages/adapter-contract`: protocol, LaunchPlan validation, generic fallback, and conformance helper.
 - `packages/cli`: optional source configuration/doctor tool.
@@ -87,4 +101,4 @@ The two config schema copies are intentionally identical and checked by `pnpm ch
 - Compatibility shims: preserve the wrong public model.
 - Automatic Adapter/package/MCP installation: violates executable trust and reproducibility.
 - Host-specific core: makes one vendor's capability model canonical.
-- Reintroducing workflow state/runtime: unnecessary for role resolution and contrary to host-native dispatch.
+- Reintroducing workflow state/runtime: unnecessary for role resolution and contrary to host-native dispatch; optional `.agent-work` material deliberately has no state-machine semantics.

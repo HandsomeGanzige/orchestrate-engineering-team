@@ -35,7 +35,36 @@ Required capability missing: do not dispatch that specialist. Ask the user wheth
 
 Roles are optional, not mandatory phases. Main decides sequencing and completion. Product Test and Review remain independent from implementation; do not coach them toward approval. Concurrent writers need disjoint ownership or real host-provided worktree/sandbox isolation. Otherwise serialize.
 
-Do not call bundled workflow scripts. Do not create workflow state, `.agent-work`, task databases, lifecycle stages, leases, receipts, voting, or machine-managed quality gates.
+Do not call bundled workflow scripts. Do not create task databases, lifecycle stages, leases, receipts, voting, or machine-managed quality gates.
+
+## Preserve continuity and authoritative facts
+
+Current user requests, revisions, and acceptance criteria are intent facts. Code, tests, types, configuration, diffs, and observed command results are implementation facts. Verify both from their current sources instead of treating a prior Agent summary as authoritative.
+
+Use the discovery, search, symbol navigation, indexes, language services, or custom host capabilities appropriate to the repository. Known paths, symbols, test names, and errors are entry points, not limits on what may be inspected. The contract requires current repository discovery, not a particular tool.
+
+Place material according to who needs it:
+
+- Agent-only working material belongs under `.agent-work/<task>/`.
+- Long-lived architecture decisions, engineering guidance, and project rules follow existing project documentation conventions.
+- Implementation facts remain with the code, tests, types, executable configuration, schemas, and necessary comments that enforce or explain them.
+- User collaboration material follows the user's chosen location or the project's existing issue, pull request, plan, and acceptance-report conventions.
+
+Main may create `.agent-work/<task>/` whenever it provides useful continuity; there is no creation threshold or permission ceremony. Do not check whether it is ignored, change `.gitignore` or Git exclude, or decide whether it should be committed. Version-control treatment belongs to the user and project. Never use `.agent-work` as a lock, queue, database, lifecycle, state machine, or quality gate. Do not store full conversations, hidden reasoning, bulk tool output, or secrets. Concurrent Agents write separate files.
+
+When a brief is useful, instantiate [main-work-brief.md](assets/main-work-brief.md) as `.agent-work/<task>/brief.md`. Main alone maintains it as a current snapshot, not an execution log. Update it when the user outcome or acceptance changes, verified repository facts or risks materially change, before a context switch or handoff, and at final delivery. It may retain compact recovery pointers such as paths, symbols, tests, and errors, but project facts and current instructions always take precedence.
+
+To resume work, read the latest user requirements and repository/host instructions, then the brief if present; inspect the current workspace, branch, diff, and uncommitted changes; rediscover relevant code, tests, configuration, and documentation with available repository capabilities; rerun necessary validation; correct stale brief conclusions; and recompute the remaining work.
+
+Prefer durable implementation truth in this order: clear code and types, executable tests and configuration, necessary comments or JSDoc, cross-module project documentation, then Agent working material. Development maintains comments only for non-obvious rationale, local invariants, compatibility constraints, or public contract details types cannot express, and removes stale comments with implementation changes. Never write task history into code comments.
+
+## Route Architecture writing safely
+
+Architecture is code-read-only but may create or update explicitly assigned Agent working files and project documentation. Its optional `workspace-write` capability is needed only for direct document output. Before assigning such output, Main confirms that the host provides the required write access; otherwise Architecture returns recommendations or a patch for Main to route. Production code, tests, executable configuration, dependencies, and machine enforcement remain Development responsibilities.
+
+Architecture may author ADRs, boundaries, responsibilities, dependency direction, public interface and compatibility principles, design guides, README architecture sections, confirmed future-Agent constraints, and maintainable diagram sources. Keep unconfirmed alternatives in Agent working material or an established proposal location. Write confirmed decisions into project documentation only after the user or Main has authority to confirm them. An `AGENTS.md` change must be explicitly assigned because it changes future Agent behavior.
+
+Long-lived Architecture documents follow repository location and naming conventions, use code-aligned terms, state scope, status, rationale, invariants, and compatibility constraints, point to related implementation and verification, record supersession, and link from an existing documentation entry point. They omit task progress, Agent conversations, and short-term execution history.
 
 ## Capability honesty
 

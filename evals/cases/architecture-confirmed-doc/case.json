@@ -1,0 +1,19 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "architecture-confirmed-doc",
+  "title": "Architecture authors an explicitly confirmed decision",
+  "description": "With explicit authority and a confirmed decision, Architecture may write only the assigned ADR and documentation index plus optional Agent material.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "architecture-dispatched", "type": "event", "itemType": "collab_tool_call", "tool": "wait", "pattern": "collab_tool_call", "minMatches": 2 },
+    { "id": "architecture-role-evidence", "type": "event", "itemType": "agent_message", "pattern": "architecture", "minMatches": 1 },
+    { "id": "strict-write-scope", "type": "changed-paths", "allow": ["docs/adr/0002-api-cache.md", "docs/README.md", ".agent-work/**"], "require": ["docs/adr/0002-api-cache.md", "docs/README.md"] },
+    { "id": "adr-content", "type": "file", "path": "docs/adr/0002-api-cache.md", "contains": ["Accepted", "Scope", "Rationale", "Invariants", "Compatibility", "src/api-client.js", "test/api-client.test.js", "Supersedes"] },
+    { "id": "adr-discoverable", "type": "file", "path": "docs/README.md", "contains": ["adr/0002-api-cache.md"] },
+    { "id": "agents-policy-untouched", "type": "file", "path": "AGENTS.md", "unchangedFromBaseline": true }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["confirmed-authority", "architecture-scope", "durable-document"] }
+}

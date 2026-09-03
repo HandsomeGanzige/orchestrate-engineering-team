@@ -1,0 +1,18 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "independent-product-review",
+  "title": "Independent Product Test and Review close the loop",
+  "description": "A user-visible compatibility fix must receive separate Product Test and engineering Review evidence, with defects routed into the final implementation.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "behavior-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
+    { "id": "defect-fixed", "type": "changed-paths", "allow": ["src/**", "test/**", ".agent-work/**"], "require": ["src/preferences.js"] },
+    { "id": "product-test-context", "type": "event", "itemType": "agent_message", "pattern": "product[- _]?test|Product Test", "minMatches": 1 },
+    { "id": "review-context", "type": "event", "itemType": "agent_message", "pattern": "(?:^|[^a-z])review(?:[^a-z]|$)", "minMatches": 1 },
+    { "id": "multiple-specialist-launches", "type": "event", "itemType": "collab_tool_call", "tool": "wait", "pattern": "collab_tool_call", "minMatches": 6 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["product-test-independent", "review-independent", "defect-closed"] }
+}

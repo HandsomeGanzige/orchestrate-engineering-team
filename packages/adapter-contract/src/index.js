@@ -46,9 +46,15 @@ export async function runAdapterConformance(adapter, fixture) {
   return { detected, plan, diagnosis };
 }
 
+function describeCapability(item, locator) {
+  const source = Array.isArray(item.source) ? item.source.join("+") : item.source;
+  return `${item.id}: ${locator} [${item.required === true ? "required" : "optional"}; status=${item.status ?? "unknown"}; source=${source ?? "unknown"}]`;
+}
+
 export function genericPromptFallback({ role, contract, focusedTask, capabilities = { skills: [], materials: [] }, limitations = [] }) {
-  const skillRefs = (capabilities.skills ?? []).map((item) => `${item.id}: ${item.ref ?? item.requested}`).join(", ") || "none";
-  const materials = (capabilities.materials ?? []).map((item) => `${item.id}: ${item.path}`).join(", ") || "none";
+  const skillRefs = (capabilities.skills ?? []).map((item) => describeCapability(item, item.ref ?? item.requested)).join(", ") || "none";
+  const materials = (capabilities.materials ?? []).map((item) => describeCapability(item, item.path)).join(", ") || "none";
+  const effectiveLimitations = ["No native adapter verified effective capabilities", ...limitations];
   return {
     adapter: "generic",
     agent: "unknown",
@@ -56,7 +62,22 @@ export function genericPromptFallback({ role, contract, focusedTask, capabilitie
     toolsPolicy: "unknown",
     sandbox: "unknown",
     isolation: "unknown",
-    limitations: ["No native adapter verified effective capabilities", ...limitations],
-    prompt: [`Role: ${role}`, `Purpose: ${contract.purpose}`, `Authority: ${contract.authority}`, `Independence: ${contract.independence}`, `Focused task: ${focusedTask}`, `Requested Skills: ${skillRefs}`, `Materials: ${materials}`, `Return: ${(contract.returns ?? []).join(", ")}`].join("\n"),
+    limitations: effectiveLimitations,
+    prompt: [
+      `Role: ${role}`,
+      `Purpose: ${contract.purpose}`,
+      `Routing guidance: ${contract.route ?? "none"}`,
+      `Authority: ${contract.authority}`,
+      `Write scope: ${contract.writeScope ?? "unspecified"}`,
+      `Independence: ${contract.independence}`,
+      `Prohibited capabilities: ${(contract.capabilities?.prohibited ?? contract.restrictions ?? []).join(", ") || "none"}`,
+      `Professional guidance: ${contract.prompt ?? "none"}`,
+      `Focused task: ${focusedTask}`,
+      `Requested Skills: ${skillRefs}`,
+      `Materials: ${materials}`,
+      "Effective host boundaries: toolsPolicy=unknown; sandbox=unknown; isolation=unknown",
+      `Limitations: ${effectiveLimitations.join("; ")}`,
+      `Return: ${(contract.returns ?? []).join(", ")}`,
+    ].join("\n"),
   };
 }

@@ -1,0 +1,17 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "optional-capability-missing",
+  "title": "Optional capability degrades without blocking",
+  "description": "A missing optional professional Skill must be disclosed while the configured role and requested delivery continue.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "behavior-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
+    { "id": "bounded-changes", "type": "changed-paths", "allow": ["src/**", "test/**", ".agent-work/**"], "require": ["src/**"] },
+    { "id": "work-continued", "type": "event", "itemType": "collab_tool_call", "tool": "wait", "pattern": "collab_tool_call", "minMatches": 2 },
+    { "id": "limitation-disclosed", "type": "final", "pattern": "oet-eval-optional-93fd", "minMatches": 1 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["continued-delivery", "limitation-disclosure", "evidence"] }
+}

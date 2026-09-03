@@ -4,14 +4,3 @@ coverage/
 node_modules/
 .pnpm-store/
 docs/*
-!docs/README.md
-!docs/acceptance-report.md
-!docs/design/
-docs/design/*
-!docs/design/single-main-skill-role-capability-injection.md
-!docs/research/
-docs/research/*
-!docs/research/multi-agent-coordination-state-machines.md
-!docs/research/context-exhaustion-continuity-goal-drift.md
-!docs/research/role-specific-agent-capability-injection.md
-.agents/orchestrate-engineering-team.local.yaml

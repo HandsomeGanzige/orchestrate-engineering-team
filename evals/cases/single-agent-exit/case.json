@@ -1,0 +1,16 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "single-agent-exit",
+  "title": "Single-Agent exit for one clear change",
+  "description": "A one-file mechanical edit should be completed directly without ceremonial specialist dispatch.",
+  "timeoutMs": 300000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "requested-content", "type": "file", "path": "greeting.txt", "contains": ["Hello, evaluation!"], "maxLines": 2 },
+    { "id": "bounded-write-scope", "type": "changed-paths", "allow": ["greeting.txt", ".agent-work/**"], "require": ["greeting.txt"] },
+    { "id": "no-specialist-dispatch", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 0, "maxMatches": 0 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["direct-completion", "no-ceremony"] }
+}

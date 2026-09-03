@@ -1,0 +1,1 @@
+Perform an independent Review of the authorization module and report actionable findings. The project configuration deliberately requires a professional capability for Review. Do not change any repository files. If the configured team cannot legally dispatch that role, follow the Skill's capability rules rather than silently substituting another specialist.

@@ -1,0 +1,23 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "fresh-context-continuity",
+  "title": "Fresh-context recovery from repository and brief",
+  "description": "A second independent Agent process must recover staged work from current instructions, repository facts, diff, tests, and a compact Main brief without changing ignore policy.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [
+    { "id": "stage-one", "promptFile": "stage-one.md" },
+    { "id": "stage-two", "promptFile": "stage-two.md" }
+  ],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "stage-one-code", "type": "file", "afterPhase": "stage-one", "path": "src/normalizer.js", "contains": ["normalizeLabel"] },
+    { "id": "stage-one-brief", "type": "file", "afterPhase": "stage-one", "path": ".agent-work/label-format/brief.md", "contains": ["Current outcome and acceptance", "Current progress", "Repository facts and evidence", "Next action"] },
+    { "id": "stage-one-boundary", "type": "changed-paths", "afterPhase": "stage-one", "allow": ["src/normalizer.js", ".agent-work/**"], "require": ["src/normalizer.js", ".agent-work/**"], "forbid": ["src/formatter.js"] },
+    { "id": "full-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
+    { "id": "complete-implementation", "type": "changed-paths", "allow": ["src/normalizer.js", "src/formatter.js", ".agent-work/**"], "require": ["src/normalizer.js", "src/formatter.js", ".agent-work/**"] },
+    { "id": "brief-updated", "type": "file", "path": ".agent-work/label-format/brief.md", "contains": ["node --test", "complete"] },
+    { "id": "gitignore-preserved", "type": "file", "path": ".gitignore", "unchangedFromBaseline": true }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["recover-current-truth", "brief-continuity", "ignore-policy"] }
+}

@@ -1,0 +1,3 @@
+This is stage one of a deliberately interrupted implementation. Implement only `normalizeLabel` in `src/normalizer.js` so its focused test passes: trim, collapse whitespace, and lowercase the label. Do not modify `src/formatter.js` yet.
+
+Before stopping, create `.agent-work/label-format/brief.md` from the Main work brief structure. Record the current outcome, constraints, verified repository/test facts, completed stage, exact remaining formatter work, and next validation. Keep it a compact current snapshot, not a transcript. Do not inspect or change `.gitignore` or Git exclude. Stop after stage one and report the handoff state.

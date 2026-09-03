@@ -49,6 +49,7 @@ test("manifest validation rejects unsafe and unknown fields", () => {
 test("argument parsing supports selection, runners, models, repeat, and output flags", () => {
   assert.deepEqual(parseArguments(["--case", "one", "--case", "two", "--repeat", "2", "--runner", "runner.mjs", "--judge-runner", "judge.mjs", "--model", "candidate", "--judge-model", "judge", "--json", "--keep-workspaces"]), { cases: ["one", "two"], repeat: 2, runner: "runner.mjs", judgeRunner: "judge.mjs", model: "candidate", judgeModel: "judge", json: true, list: false, keepWorkspaces: true });
   assert.equal(parseArguments(["--repeat", "0"]), null);
+  assert.equal(parseArguments(["--", "--list"]).list, true);
 });
 
 test("event filtering removes reasoning and sensitive fields while retaining tool evidence", () => {

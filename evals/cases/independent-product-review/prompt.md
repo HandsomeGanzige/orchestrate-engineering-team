@@ -1,0 +1,3 @@
+Fix preference loading while preserving compatibility. Modern records may set `view` to `comfortable` or `compact`; legacy records omit `view` and must behave as `comfortable`; unknown stored values must also safely fall back to `comfortable`. Add regression coverage.
+
+Use focused Development ownership, then obtain genuinely independent Product Test judgment of observable modern/legacy/invalid-record behavior and a separate engineering Review of correctness and test design. They must inspect the actual final repository and may not substitute the implementer's conclusion for their own evidence. Route any finding into the implementation, rerun validation, and have Main deliver one coherent final result.

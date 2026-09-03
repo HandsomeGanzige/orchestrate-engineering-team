@@ -1,0 +1,8 @@
+apiVersion: orchestrate-engineering-team/v1
+roles:
+  review:
+    capabilities:
+      skills:
+        - id: optional-security-review
+          ref: oet-eval-optional-93fd
+          required: false

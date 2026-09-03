@@ -1,0 +1,17 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "required-capability-missing",
+  "title": "Required capability prevents dispatch",
+  "description": "A configured required Skill that cannot be resolved must block that specialist and leave the user the stated choices.",
+  "timeoutMs": 300000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "no-repository-change", "type": "changed-paths", "allow": [".agent-work/**"] },
+    { "id": "no-blocked-dispatch", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 0, "maxMatches": 0 },
+    { "id": "missing-capability-disclosed", "type": "final", "pattern": "oet-eval-required-7a1c", "minMatches": 1 },
+    { "id": "choice-requested", "type": "final", "pattern": "degrad|single[- ]Agent|cancel|降级|单.Agent|取消", "minMatches": 2 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["blocked-dispatch", "honest-capability", "user-choice"] }
+}

@@ -1,0 +1,13 @@
+apiVersion: orchestrate-engineering-team/v1
+roles:
+  review:
+    capabilities:
+      skills:
+        - id: arithmetic-review
+          ref: oet-eval-review-guidance-44b2
+          required: false
+      materials:
+        - id: project-review-guide
+          path: guidance/review.md
+          scope: project
+          required: true

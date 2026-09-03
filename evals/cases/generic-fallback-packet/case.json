@@ -1,0 +1,22 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "generic-fallback-packet",
+  "title": "Complete generic fallback role packet",
+  "description": "Without an Adapter, a specialist launch must carry the canonical contract, focused task, resolved additions, provenance, and real enforcement limits.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "read-only-result", "type": "changed-paths", "allow": [".agent-work/**"] },
+    { "id": "fallback-dispatch", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 1 },
+    { "id": "packet-purpose-authority", "type": "event", "pattern": "purpose[\\s\\S]{0,3000}(authority|scope)|authority[\\s\\S]{0,3000}purpose", "minMatches": 1 },
+    { "id": "packet-independence-and-write", "type": "event", "pattern": "independen[\\s\\S]{0,3000}(read.only|write.scope)|(?:read.only|write.scope)[\\s\\S]{0,3000}independen", "minMatches": 1 },
+    { "id": "packet-prohibitions", "type": "event", "pattern": "prohibit|must not implement|do not implement", "minMatches": 1 },
+    { "id": "packet-capability-and-material", "type": "event", "pattern": "oet-eval-review-guidance-44b2[\\s\\S]{0,4000}guidance/review.md|guidance/review.md[\\s\\S]{0,4000}oet-eval-review-guidance-44b2", "minMatches": 1 },
+    { "id": "packet-provenance", "type": "event", "pattern": "provenance|project.config|project configuration|source", "minMatches": 1 },
+    { "id": "packet-real-limits", "type": "event", "pattern": "prompt.fallback|generic fallback|unknown[\\s\\S]{0,1000}(sandbox|tool|isolation)|(?:sandbox|tool|isolation)[\\s\\S]{0,1000}unknown", "minMatches": 1 },
+    { "id": "optional-gap-reported", "type": "final", "pattern": "oet-eval-review-guidance-44b2", "minMatches": 1 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["complete-packet", "honest-fallback", "independent-review"] }
+}

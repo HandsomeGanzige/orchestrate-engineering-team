@@ -1,0 +1,17 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "dynamic-team-delivery",
+  "title": "Dynamic team delivery for a compatibility change",
+  "description": "A compatibility-sensitive implementation should use only specialists with real value and be integrated by Main without imposing a fixed lifecycle.",
+  "timeoutMs": 600000,
+  "sandbox": "workspace-write",
+  "phases": [{ "id": "execute", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "behavior-tests", "type": "command", "argv": ["node", "--test"], "exitCode": 0 },
+    { "id": "implementation-delivered", "type": "changed-paths", "allow": ["src/**", "test/**", "README.md", ".agent-work/**"], "require": ["src/**"] },
+    { "id": "specialist-used", "type": "event", "pattern": "spawn_agent|collab.*spawn", "minMatches": 1 },
+    { "id": "known-roles-only", "type": "event", "pattern": "project.manager|scrum.master|mandatory.phase|lifecycle.stage", "minMatches": 0, "maxMatches": 0 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["compatibility", "valuable-specialists", "main-integration"] }
+}

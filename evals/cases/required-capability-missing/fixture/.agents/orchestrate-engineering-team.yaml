@@ -1,0 +1,8 @@
+apiVersion: orchestrate-engineering-team/v1
+roles:
+  review:
+    capabilities:
+      skills:
+        - id: mandatory-auth-review
+          ref: oet-eval-required-7a1c
+          required: true

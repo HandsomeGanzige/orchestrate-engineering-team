@@ -11,6 +11,7 @@ export function parseArguments(args) {
   const options = { cases: [], repeat: 1, runner: "codex", judgeRunner: null, model: null, judgeModel: null, json: false, list: false, keepWorkspaces: false };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
+    if (argument === "--") continue;
     if (argument === "--json") options.json = true;
     else if (argument === "--list") options.list = true;
     else if (argument === "--keep-workspaces") options.keepWorkspaces = true;

@@ -7,11 +7,11 @@ This report describes the checks present in the repository. It is not evidence o
 `pnpm verify` checks that:
 
 - `.agents/skills/` contains only `orchestrate-engineering-team`;
-- the Main Skill contains five supporting resources plus `SKILL.md` and Codex UI metadata, including the Main work-brief template and bundled nested Review retrievability reference Skill;
+- the Main Skill contains five supporting resources plus `SKILL.md` and Codex UI metadata, including the Main work-brief template and bundled Review retrievability reference;
 - exactly four internal Role Contracts exist: architecture, development, product-test, and review;
 - former public Role Skill directories are rejected;
 - Main continuity instructions preserve `.agent-work` as non-authoritative working material, require the work-brief sections, and use tool-neutral discovery language;
-- the retrievability capability is fresh-context, read-only Review guidance with a deletion test, anti-count/noise rules, evidence-based findings, and Main-routed repairs;
+- the retrievability guidance is fresh-context, read-only Review guidance with a deletion test, anti-count/noise rules, evidence-based findings, and Main-routed repairs;
 - Architecture has optional `workspace-write` only for assigned Agent working files and project documentation while production code, tests, executable configuration, dependencies, user decisions, and overall coordination remain prohibited;
 - the Skill config schema and package config schema remain byte-identical;
 - host-neutral core files do not contain the host-specific references prohibited by the static check.
@@ -40,7 +40,7 @@ The `smoke:skill-install` check is a local copied fixture. It validates the inst
 
 `pnpm eval` is deliberately outside CI and `pnpm verify`. It copies the current branch's Skill into `.agents/skills/orchestrate-engineering-team/` in a fresh case repository, confirms that the Runner discovers that exact copy, and invokes one independent Agent session per candidate phase. A second read-only repository without the tested Skill hosts the independent Judge.
 
-Every case combines executable/file/diff/event hard checks with a semantic rubric. Any hard safety check fails the attempt. The Judge must score at least 80/100 and pass every critical criterion; its other violations remain diagnostic because safety gates are deterministic. The ten initial cases exercise single-Agent exit, dynamic selection, required/optional capability behavior, generic fallback completeness, fresh-context continuity, tool-neutral discovery, confirmed/unconfirmed Architecture writing, and separate Product Test/Review evidence. They do not yet isolate or score the bundled retrievability capability; its current checks are static contract and packaging checks.
+Every case combines executable/file/diff/event hard checks with a semantic rubric. Any hard safety check fails the attempt. The Judge must score at least 80/100 and pass every critical criterion; its other violations remain diagnostic because safety gates are deterministic. The ten initial cases exercise single-Agent exit, dynamic selection, required/optional capability behavior, generic fallback completeness, fresh-context continuity, tool-neutral discovery, confirmed/unconfirmed Architecture writing, and separate Product Test/Review evidence. They do not yet isolate or score the bundled retrievability guidance; its current checks are static contract and packaging checks.
 
 The built-in Codex Runner uses the operator's existing authentication and inherits CLI model defaults unless overridden. Filtered events, final messages, diffs, checks, Judge output, metadata, and summaries are written only below ignored `evals/.runs/`; temporary workspaces are deleted unless explicitly retained. Hidden reasoning, authentication files, complete environments, and unbounded unrelated output are not retained.
 
@@ -49,11 +49,10 @@ A first real run is recorded as a local diagnostic baseline whether it passes or
 ## Not currently provided or verified
 
 - No concrete Pi, Claude Code, Codex, or Gemini Adapter ships.
-- `disable-model-invocation` expresses intent for the nested retrievability reference Skill; it is not portable proof that every host hides nested Skill files. Current installation checks prove only one top-level public Skill in the supported fixtures.
 - Deterministic tests do not launch real specialists, and a manual behavior run does not prove effective host sandbox/tool isolation beyond the Runner's observed preflight and execution metadata.
 - No npm publish workflow or release tag is present; workspace packages are currently source packages.
 - Ephemeral task additions are assembled by Main for a dispatch; they are not a persisted CLI config layer.
-- The bundled retrievability capability has not yet been validated by a dedicated longitudinal or adversarial black-box case; no current result proves that tags or metadata improve fresh-Agent retrieval efficiency.
+- The bundled retrievability guidance has not yet been validated by a dedicated longitudinal or adversarial black-box case; no current result proves that tags or metadata improve fresh-Agent retrieval efficiency.
 - Prompt restrictions remain advisory and are not operating-system enforcement.
 - `.agent-work` is optional Agent material, not authoritative state, and the Skill does not decide its Git ignore or commit policy.
 

@@ -4,7 +4,7 @@
 
 ## Decision
 
-The product publishes one top-level public Skill: `orchestrate-engineering-team`. Architecture, Development, Product Test, and Review are stable internal Role Contracts. Professional Skills are optional capabilities attached by configuration or bundled behind Main's progressive disclosure; packages/plugins are distribution sources; host Adapters translate a resolved role into native launch settings.
+The product publishes one top-level public Skill: `orchestrate-engineering-team`. Architecture, Development, Product Test, and Review are stable internal Role Contracts. Professional Skills are optional capabilities attached by configuration; focused internal guidance may be bundled behind Main's progressive disclosure; packages/plugins are distribution sources; host Adapters translate a resolved role into native launch settings.
 
 This replaces the former five-Skill design. There are no compatibility shims.
 
@@ -26,11 +26,11 @@ Main may keep non-authoritative working material under `.agent-work/<task>/` and
 
 Long-lived architecture guidance follows project documentation conventions. Implementation truth remains in code, types, tests, executable configuration, schemas, and necessary comments. User collaboration artifacts follow the user's chosen or project-established location.
 
-## Bundled Review retrievability capability
+## Bundled Review retrievability guidance
 
-The Main Skill bundles one nested professional reference Skill at `references/review-agent-retrievability/SKILL.md`. It is not a fifth role or a top-level public Skill; whether a host independently discovers or permits direct invocation of nested Skill files is host-dependent and must not be claimed as enforced by frontmatter alone. Main selects it only for a focused Review after a material interface, cross-module, security, compatibility, migration, or architecture change when independent fresh-context inspection can expose knowledge that future Agents would otherwise miss.
+The Main Skill bundles a progressively disclosed reference at `references/retrievability-review.md`. It is neither a fifth role nor a separately invocable Skill. Main reads it only for a focused Review after a material interface, cross-module, security, compatibility, migration, or architecture change when independent fresh-context inspection can expose knowledge that future Agents would otherwise miss.
 
-It is bundled reference guidance selected separately by Main, not a persistent configuration layer. The capability keeps Review read-only. It audits discovery cost, canonical ownership, current evidence, stale or superseded material, and retrieval noise; it does not reward documentation or tag count and does not introduce a repository-wide taxonomy without a separate project decision. Main evaluates its findings and routes accepted code/type/test/configuration/comment repairs to Development or confirmed architecture documentation repairs to explicitly write-enabled Architecture.
+The guidance keeps Review read-only. It audits discovery cost, canonical ownership, current evidence, stale or superseded material, and retrieval noise; it does not reward documentation or tag count and does not introduce a repository-wide taxonomy without a separate project decision. Main evaluates its findings and routes accepted code/type/test/configuration/comment repairs to Development or confirmed architecture documentation repairs to explicitly write-enabled Architecture.
 
 ## Architecture documentation authority
 
@@ -94,7 +94,7 @@ Required missing items, source conflicts, prompt fallback, requested/effective p
 
 ## Repository shape
 
-- `.agents/skills/orchestrate-engineering-team/`: only public Skill, contracts, schema copy, request packet, Main work-brief template, and the nested Review retrievability reference Skill intended for Main-selected disclosure.
+- `.agents/skills/orchestrate-engineering-team/`: only public Skill, contracts, schema copy, request packet, Main work-brief template, and the Review retrievability reference intended for Main-selected disclosure.
 - `packages/config`: validation, persistent layer merging, provenance, path safety, and diagnostics.
 - `packages/adapter-contract`: protocol, LaunchPlan validation, generic fallback, and conformance helper.
 - `packages/cli`: optional source configuration/doctor tool.

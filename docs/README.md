@@ -11,7 +11,7 @@ Use this page to distinguish current repository contracts from background materi
 - [`../evals/README.md`](../evals/README.md) — manual black-box Skill behavior cases, Runner extension contract, evidence, and pass rules.
 - Package references: [`../packages/config/README.md`](../packages/config/README.md), [`../packages/adapter-contract/README.md`](../packages/adapter-contract/README.md), and [`../packages/cli/README.md`](../packages/cli/README.md).
 
-The executable product contract lives in `.agents/skills/orchestrate-engineering-team/`: `SKILL.md`, `references/role-contracts.yaml`, `references/config.schema.json`, `references/review-agent-retrievability/SKILL.md`, and `assets/role-task-packet.md`.
+The executable product contract lives in `.agents/skills/orchestrate-engineering-team/`: `SKILL.md`, `references/role-contracts.yaml`, `references/config.schema.json`, `references/retrievability-review.md`, and `assets/role-task-packet.md`.
 
 ## Design decision
 

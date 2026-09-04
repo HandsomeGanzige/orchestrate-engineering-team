@@ -1,10 +1,4 @@
----
-name: review-agent-retrievability
-description: Audit whether a fresh engineering Agent can efficiently recover the confirmed, durable knowledge needed to change a repository safely. Use only when Main assigns a focused retrievability review after a material interface, cross-module, security, compatibility, migration, or architecture change.
-disable-model-invocation: true
----
-
-# Review Agent Retrievability
+# Retrievability review guidance
 
 Act as an independent Reviewer. Assess the current repository from a fresh-context perspective and return findings; do not implement repairs or perform Product Test. Current user requirements, repository instructions, code, types, tests, schemas, executable configuration, current document status, and observed command results outrank summaries, tags, comments, and Agent working material.
 

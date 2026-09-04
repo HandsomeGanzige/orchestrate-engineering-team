@@ -15,7 +15,7 @@ git diff --check
 - Role Contracts own authority and independence. Configuration and Adapters may narrow but never expand them.
 - Architecture is read-only for code, tests, executable configuration, and dependencies. It may write explicitly assigned Agent working files or project documentation only when the host supplies effective write access; an `AGENTS.md` change must be explicitly assigned.
 - Keep configuration and Adapter contract packages host-neutral. Concrete host support belongs in independently trusted adapter packages.
-- Keep the bundled `review-agent-retrievability` reference Skill nested, selectively disclosed by Main, and read-only; do not claim host-neutral invocation privacy for its frontmatter. It reports evidence-based retrieval defects; Main routes accepted repairs to the role that owns the authoritative artifact.
+- Keep `references/retrievability-review.md` as selectively disclosed, read-only Review guidance rather than a separately invocable Skill. It reports evidence-based retrieval defects; Main routes accepted repairs to the role that owns the authoritative artifact.
 - Main uses host-native subagents and may keep non-authoritative continuity material in `.agent-work/<task>/`. Never turn it into lifecycle state, a workflow runtime, locks, leases, receipts, voting, or quality gates.
 - The Skill does not inspect or manage `.agent-work` Git ignore/exclude/commit policy. Preserve the user's and project's version-control decision.
 - Repository discovery requirements must describe capabilities and evidence, not mandate a particular search command or index implementation.

@@ -15,6 +15,7 @@ git diff --check
 - Role Contracts own authority and independence. Configuration and Adapters may narrow but never expand them.
 - Architecture is read-only for code, tests, executable configuration, and dependencies. It may write explicitly assigned Agent working files or project documentation only when the host supplies effective write access; an `AGENTS.md` change must be explicitly assigned.
 - Keep configuration and Adapter contract packages host-neutral. Concrete host support belongs in independently trusted adapter packages.
+- Keep the bundled `review-agent-retrievability` reference Skill nested, selectively disclosed by Main, and read-only; do not claim host-neutral invocation privacy for its frontmatter. It reports evidence-based retrieval defects; Main routes accepted repairs to the role that owns the authoritative artifact.
 - Main uses host-native subagents and may keep non-authoritative continuity material in `.agent-work/<task>/`. Never turn it into lifecycle state, a workflow runtime, locks, leases, receipts, voting, or quality gates.
 - The Skill does not inspect or manage `.agent-work` Git ignore/exclude/commit policy. Preserve the user's and project's version-control decision.
 - Repository discovery requirements must describe capabilities and evidence, not mandate a particular search command or index implementation.
@@ -22,7 +23,7 @@ git diff --check
 
 ## Changes
 
-Update tests for role contract/schema behavior, continuity resources, Architecture write boundaries, fallback prompt completeness, merge precedence, required/optional capabilities, material path safety, Adapter conformance, CLI exit codes, and single-Skill distribution shape. Keep the two config schema copies byte-identical. Keep generated or local configuration out of commits unless it is an intentional fixture.
+Update tests for role contract/schema behavior, continuity and retrievability resources, Architecture write boundaries, fallback prompt completeness, merge precedence, required/optional capabilities, material path safety, Adapter conformance, CLI exit codes, and single-Skill distribution shape. Keep the two config schema copies byte-identical. Keep generated or local configuration out of commits unless it is an intentional fixture.
 
 Keep documentation claims within the boundaries recorded in `docs/acceptance-report.md`: local Skill installation is a copied fixture, concrete host Adapters do not ship, and workspace packages are not registry-installed until a publication path exists. Update `README.md`, package READMEs, the acceptance report, design decision, and changelog when those facts change.
 

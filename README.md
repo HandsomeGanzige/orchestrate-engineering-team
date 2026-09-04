@@ -9,7 +9,7 @@ The repository exposes one public Skill, `orchestrate-engineering-team`. Archite
 - Repository/workspace version: `1.0.0`.
 - Public Skill: one.
 - Internal Role Contracts: four (`architecture`, `development`, `product-test`, `review`).
-- Main supporting resources: four, including the optional work-brief template.
+- Main supporting resources: five, including the optional work-brief template and bundled Review retrievability capability.
 - Workspace packages: config, Adapter contract, and CLI.
 - Concrete host Adapters: none.
 - npm publication: the three scoped workspace packages are currently source-only and are not an installation prerequisite for the Skill.
@@ -44,7 +44,7 @@ Ask the Main Skill to deliver or investigate a substantial engineering outcome. 
 - **Architecture** for consequential options, tradeoffs, and explicitly assigned architecture documentation;
 - **Development** for focused implementation ownership;
 - **Product Test** for independent user, business, compatibility, and stability judgement;
-- **Review** for independent engineering inspection.
+- **Review** for independent engineering inspection, optionally using the bundled `review-agent-retrievability` capability to audit whether a fresh Agent can recover consequential project knowledge without implementation history.
 
 One clear change stays with a normal single Agent. Main dispatches through the host's native subagent mechanism. Without a host Adapter it uses an explicit compact prompt fallback that carries the role guidance, prohibited capabilities, write boundary, resolved material references, and actual limitations.
 
@@ -54,7 +54,7 @@ Repository discovery is tool-neutral: known files and symbols are starting point
 
 ## Configure professional capabilities
 
-Configuration is optional. Precedence is user → project → project-local → ephemeral task additions → host capability ceiling.
+Configuration is optional. Precedence is user → project → project-local → ephemeral task additions → host capability ceiling. The bundled `review-agent-retrievability` reference Skill is selected separately by Main for focused Review and is not a persistent configuration layer.
 
 ```yaml
 # .agents/orchestrate-engineering-team.yaml
@@ -87,7 +87,7 @@ The CLI and Main never automatically install Adapters, plugins, packages, extens
 
 ## Repository layout
 
-- `.agents/skills/orchestrate-engineering-team/` — canonical public Skill, Role Contracts, config schema copy, role task packet, and Main work-brief template.
+- `.agents/skills/orchestrate-engineering-team/` — canonical public Skill, Role Contracts, config schema copy, role task packet, Main work-brief template, and the nested `review-agent-retrievability` reference Skill intended for selective disclosure through Main. Independent discovery or invocation of nested Skill files remains host-dependent.
 - `packages/config/` — configuration parsing, merging, provenance, material-path checks, and capability diagnostics.
 - `packages/adapter-contract/` — Adapter and LaunchPlan validation, conformance helper, and generic prompt fallback.
 - `packages/cli/` — optional source CLI for configuration and diagnostics.
@@ -118,7 +118,7 @@ pnpm verify
 git diff --check
 ```
 
-`pnpm verify` currently checks the one-Skill/four-contract/four-resource shape, host-neutral core, 28 Node test cases, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
+`pnpm verify` currently checks the one-Skill/four-contract/five-resource shape, host-neutral core, 30 Node test cases, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
 
 Black-box behavior evaluation is a separate manual workflow:
 

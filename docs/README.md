@@ -19,6 +19,7 @@ The executable product contract lives in `.agents/skills/orchestrate-engineering
 
 ## Supporting research
 
+- [`research/harness-engineering-course-project-audit-zh.md`](research/harness-engineering-course-project-audit-zh.md) — Chinese course-to-project audit: good practices, evidence gaps, reproduced eval defects, and proposed experiments.
 - [`research/agent-retrievable-repository-knowledge-conventions.md`](research/agent-retrievable-repository-knowledge-conventions.md)
 - [`research/context-exhaustion-continuity-goal-drift.md`](research/context-exhaustion-continuity-goal-drift.md)
 - [`research/multi-agent-coordination-state-machines.md`](research/multi-agent-coordination-state-machines.md)

@@ -8,6 +8,15 @@
 
 ## Current progress
 
+## Current execution and continuation
+
+- Current state:
+- Active run/workflow identifiers:
+- Last confirmed terminal stage:
+- Continuation owner:
+- Remaining stages:
+- Wake condition:
+
 ## Repository facts and evidence
 
 ## Open work and risks

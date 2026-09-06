@@ -44,10 +44,16 @@
     "/skills/systems/SKILL.md",
     "docs/adr/0001.md",
     "workspace-write unavailable",
-    "toolsPolicy=unknown"
+    "toolsPolicy=unknown",
+    "resultDelivery=unknown",
+    "dependencyBarrier=unknown",
+    "supervisorContinuation=unknown"
   ],
   "expectedLimitations": [
     "No native adapter verified effective capabilities",
+    "Result delivery semantics unknown",
+    "Dependency barrier semantics unknown",
+    "Supervisor continuation semantics unknown",
     "workspace-write unavailable"
   ]
 }

@@ -16,13 +16,14 @@ const EXPECTED_IDS = [
   "fresh-context-continuity",
   "generic-fallback-packet",
   "independent-product-review",
+  "nonterminal-run-recovery",
   "optional-capability-missing",
   "required-capability-missing",
   "single-agent-exit",
   "tool-neutral-discovery",
 ];
 
-test("the initial behavior suite contains ten valid, fully rubriced cases", async () => {
+test("the behavior suite contains eleven valid, fully rubriced cases", async () => {
   const cases = await discoverCases(CASES_ROOT);
   assert.deepEqual(cases.map((item) => item.id), EXPECTED_IDS);
   for (const item of cases) {
@@ -35,6 +36,7 @@ test("special case mechanics describe isolation boundaries", async () => {
   assert.deepEqual(cases.get("tool-neutral-discovery").environment.blockedCommands, ["rg"]);
   assert.deepEqual(cases.get("fresh-context-continuity").phases.map((phase) => phase.id), ["stage-one", "stage-two"]);
   assert.equal(cases.get("architecture-confirmed-doc").checks.find((check) => check.id === "strict-write-scope").allow.includes("src/**"), false);
+  assert.equal(cases.get("nonterminal-run-recovery").sandbox, "read-only");
 });
 
 test("seeded implementation fixtures begin with observable failing behavior", async () => {

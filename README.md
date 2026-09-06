@@ -9,7 +9,7 @@ The repository exposes one public Skill, `orchestrate-engineering-team`. Archite
 - Repository/workspace version: `1.0.0`.
 - Public Skill: one.
 - Internal Role Contracts: four (`architecture`, `development`, `product-test`, `review`).
-- Main supporting resources: five, including the optional work-brief template and bundled Review retrievability guidance.
+- Main supporting resources: six, including the optional work-brief template, host-neutral execution-continuity guidance, and bundled Review retrievability guidance.
 - Workspace packages: config, Adapter contract, and CLI.
 - Concrete host Adapters: none.
 - npm publication: the three scoped workspace packages are currently source-only and are not an installation prerequisite for the Skill.
@@ -48,7 +48,9 @@ Ask the Main Skill to deliver or investigate a substantial engineering outcome. 
 
 One clear change stays with a normal single Agent. Main dispatches through the host's native subagent mechanism. Without a host Adapter it uses an explicit compact prompt fallback that carries the role guidance, prohibited capabilities, write boundary, resolved material references, and actual limitations.
 
-Main may use `.agent-work/<task>/` for private working material and may instantiate the bundled `main-work-brief.md` as `brief.md` when continuity is useful. The directory is never a workflow state machine, lock, queue, database, or quality gate, and the Skill never decides whether it is ignored or committed. Current user instructions and verified repository facts always outrank a brief.
+Main may use `.agent-work/<task>/` for private working material and may instantiate the bundled `main-work-brief.md` as `brief.md` when continuity is useful. The directory is never a workflow state machine, lock, queue, database, or quality gate, and the Skill never decides whether it is ignored or committed. Current user instructions, authoritative host lifecycle state, and verified repository facts always outrank a brief.
+
+For asynchronous work, dependent stages, supervisor questions, pause/detach behavior, and restart recovery, Main loads the host-neutral execution-continuity guidance. Receipts and waiting/progress notifications are not final role results. A multi-stage workflow that may ask the supervisor is auto-continuing only when the Adapter reports terminal-only dependency barriers and automatic supervisor continuation. Unknown or weaker host semantics use conservative parent-managed waves: Main verifies the exact preceding run and artifacts before dispatching the next stage.
 
 Repository discovery is tool-neutral: known files and symbols are starting points, while each role uses the host's suitable search, navigation, index, or language capabilities to verify the current code and documentation. Architecture remains code-read-only; direct writes require an explicit document assignment and effective host write permission. Unconfirmed proposals stay separate from established project rules.
 
@@ -87,12 +89,12 @@ The CLI and Main never automatically install Adapters, plugins, packages, extens
 
 ## Repository layout
 
-- `.agents/skills/orchestrate-engineering-team/` — canonical public Skill, Role Contracts, config schema copy, role task packet, Main work-brief template, and `references/retrievability-review.md`, which Main discloses only for focused Review.
+- `.agents/skills/orchestrate-engineering-team/` — canonical public Skill, Role Contracts, config schema copy, role task packet, Main work-brief template, `references/execution-continuity.md` for asynchronous/recovery branches, and `references/retrievability-review.md` for focused Review.
 - `packages/config/` — configuration parsing, merging, provenance, material-path checks, and capability diagnostics.
 - `packages/adapter-contract/` — Adapter and LaunchPlan validation, conformance helper, and generic prompt fallback.
 - `packages/cli/` — optional source CLI for configuration and diagnostics.
 - `scripts/` — repository validation, package smoke checks, distribution fixtures, and the behavior-eval harness.
-- `evals/cases/` — ten isolated black-box Skill behavior cases; see [`evals/README.md`](evals/README.md).
+- `evals/cases/` — eleven isolated black-box Skill behavior cases; see [`evals/README.md`](evals/README.md).
 - `docs/` — current decision, verification scope, and supporting research; see [`docs/README.md`](docs/README.md).
 
 ## Safety
@@ -118,7 +120,7 @@ pnpm verify
 git diff --check
 ```
 
-`pnpm verify` currently checks the one-Skill/four-contract/five-resource shape, host-neutral core, 30 Node test cases, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
+`pnpm verify` currently checks the one-Skill/four-contract/six-resource shape, host-neutral core, the Node test suite, copied-repository shape, and installable workspace tarballs. It never launches a real Agent or consumes model usage.
 
 Black-box behavior evaluation is a separate manual workflow:
 

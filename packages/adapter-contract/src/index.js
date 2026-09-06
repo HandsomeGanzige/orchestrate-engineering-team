@@ -4,7 +4,12 @@ export const HOST_FACT_VALUES = Object.freeze({
   toolsPolicy: ["allowlist", "denylist", "inherited", "advisory", "unknown"],
   sandbox: ["read-only", "workspace-write", "inherited", "unknown"],
   isolation: ["worktree", "sandbox", "shared", "unknown"],
+  resultDelivery: ["terminal-result", "receipt-notification", "text-only", "unknown"],
+  dependencyBarrier: ["terminal-only", "nonterminal-possible", "unknown"],
+  supervisorContinuation: ["automatic", "parent-managed", "unsupported", "unknown"],
 });
+
+const OPTIONAL_HOST_FACTS = Object.freeze(["resultDelivery", "dependencyBarrier", "supervisorContinuation"]);
 
 function callable(value, name) {
   if (typeof value?.[name] !== "function") throw new TypeError(`adapter.${name} must be a function`);
@@ -21,9 +26,11 @@ export function validateAdapter(adapter) {
 export function validateLaunchPlan(plan) {
   if (!plan || typeof plan !== "object") throw new TypeError("LaunchPlan must be an object");
   for (const field of ["adapter", "agent", "mode", "toolsPolicy", "sandbox", "isolation"]) if (typeof plan[field] !== "string") throw new TypeError(`LaunchPlan.${field} must be a string`);
-  for (const [field, values] of Object.entries(HOST_FACT_VALUES)) if (!values.includes(plan[field])) throw new TypeError(`LaunchPlan.${field} has unsupported value '${plan[field]}'`);
-  if (!Array.isArray(plan.limitations) || plan.limitations.some((item) => typeof item !== "string")) throw new TypeError("LaunchPlan.limitations must be an array of strings");
-  return plan;
+  const normalized = { ...plan };
+  for (const field of OPTIONAL_HOST_FACTS) if (normalized[field] === undefined) normalized[field] = "unknown";
+  for (const [field, values] of Object.entries(HOST_FACT_VALUES)) if (!values.includes(normalized[field])) throw new TypeError(`LaunchPlan.${field} has unsupported value '${normalized[field]}'`);
+  if (!Array.isArray(normalized.limitations) || normalized.limitations.some((item) => typeof item !== "string")) throw new TypeError("LaunchPlan.limitations must be an array of strings");
+  return normalized;
 }
 
 export function assertAuthorityNotExpanded(request, plan) {
@@ -54,7 +61,13 @@ function describeCapability(item, locator) {
 export function genericPromptFallback({ role, contract, focusedTask, capabilities = { skills: [], materials: [] }, limitations = [] }) {
   const skillRefs = (capabilities.skills ?? []).map((item) => describeCapability(item, item.ref ?? item.requested)).join(", ") || "none";
   const materials = (capabilities.materials ?? []).map((item) => describeCapability(item, item.path)).join(", ") || "none";
-  const effectiveLimitations = ["No native adapter verified effective capabilities", ...limitations];
+  const effectiveLimitations = [
+    "No native adapter verified effective capabilities",
+    "Result delivery semantics unknown",
+    "Dependency barrier semantics unknown",
+    "Supervisor continuation semantics unknown",
+    ...limitations,
+  ];
   return {
     adapter: "generic",
     agent: "unknown",
@@ -62,6 +75,9 @@ export function genericPromptFallback({ role, contract, focusedTask, capabilitie
     toolsPolicy: "unknown",
     sandbox: "unknown",
     isolation: "unknown",
+    resultDelivery: "unknown",
+    dependencyBarrier: "unknown",
+    supervisorContinuation: "unknown",
     limitations: effectiveLimitations,
     prompt: [
       `Role: ${role}`,
@@ -76,6 +92,7 @@ export function genericPromptFallback({ role, contract, focusedTask, capabilitie
       `Requested Skills: ${skillRefs}`,
       `Materials: ${materials}`,
       "Effective host boundaries: toolsPolicy=unknown; sandbox=unknown; isolation=unknown",
+      "Effective host continuity: resultDelivery=unknown; dependencyBarrier=unknown; supervisorContinuation=unknown",
       `Limitations: ${effectiveLimitations.join("; ")}`,
       `Return: ${(contract.returns ?? []).join(", ")}`,
     ].join("\n"),

@@ -43,7 +43,8 @@ The initial suite covers:
 7. tool-neutral discovery when `rg` is unavailable;
 8. confirmed Architecture documentation writes;
 9. unconfirmed Architecture proposals;
-10. independent Product Test and Review with defect closure.
+10. independent Product Test and Review with defect closure;
+11. nonterminal review recovery without premature dependency release, duplicate writers, or delivery claims.
 
 ## Runner contract
 

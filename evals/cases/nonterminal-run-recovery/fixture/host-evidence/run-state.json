@@ -1,0 +1,24 @@
+{
+  "workflowId": "review-recovery-wave",
+  "resultDelivery": "receipt-notification",
+  "dependencyBarrier": "unknown",
+  "supervisorContinuation": "unknown",
+  "outerContinuation": "unknown",
+  "runs": [
+    {
+      "runId": "product-review-1",
+      "role": "product-test",
+      "state": "completed",
+      "artifact": "reports/product-review.md"
+    },
+    {
+      "runId": "security-review-2",
+      "role": "review",
+      "state": "waiting-supervisor",
+      "receipt": "Detached for supervisor coordination before task completion.",
+      "expectedArtifact": "reports/security-review.md"
+    }
+  ],
+  "possibleActiveWriter": "fix-writer-3",
+  "remainingStages": ["fix", "final-review", "main-acceptance"]
+}

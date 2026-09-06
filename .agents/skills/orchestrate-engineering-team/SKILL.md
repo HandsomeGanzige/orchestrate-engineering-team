@@ -22,7 +22,9 @@ For each useful specialist:
 4. Ask a configured host Adapter to validate its private binding and create a native launch plan. Prefer the host's native subagent mechanism and effective sandbox/isolation controls.
 5. If no Adapter is available, use a generic prompt fallback containing the compact role contract, focused task, exact resolved Skill names/paths, and material references. Do not copy every Skill body or the entire parent conversation.
 
-A resolved request should account for role/contract, requested capability and provenance, native Agent, mode (`native` or `prompt-fallback`), effective or unknown tools policy, sandbox, workspace isolation, and limitations. Host permissions are always the final capability ceiling. Prompt restrictions are advisory, not a sandbox.
+A resolved request should account for role/contract, requested capability and provenance, native Agent, mode (`native` or `prompt-fallback`), effective or unknown tools policy, sandbox, workspace isolation, result delivery, dependency barriers, supervisor continuation, and limitations. Host permissions are always the final capability ceiling. Prompt restrictions are advisory, not a sandbox.
+
+Immediately before dispatch or recovery involving asynchronous/background execution, dependent stages, supervisor questions, pause/detach behavior, notifications, or restart, read [execution continuity guidance](references/execution-continuity.md). Use one automatically dependent workflow across a possible supervisor question only when the resolved host reports `dependencyBarrier=terminal-only` and `supervisorContinuation=automatic`; otherwise dispatch conservative waves that Main advances only after verifying the preceding wave's terminal results.
 
 Required capability missing: do not dispatch that specialist. Ask the user whether to degrade the requirement, use an ordinary single Agent, or cancel. Optional capability missing: continue and record the limitation. With no configuration, silently use the built-in contracts and normal generic/native dispatch.
 
@@ -52,7 +54,7 @@ Place material according to who needs it:
 
 Main may create `.agent-work/<task>/` whenever it provides useful continuity; there is no creation threshold or permission ceremony. Do not check whether it is ignored, change `.gitignore` or Git exclude, or decide whether it should be committed. Version-control treatment belongs to the user and project. Never use `.agent-work` as a lock, queue, database, lifecycle, state machine, or quality gate. Do not store full conversations, hidden reasoning, bulk tool output, or secrets. Concurrent Agents write separate files.
 
-When a brief is useful, instantiate [main-work-brief.md](assets/main-work-brief.md) as `.agent-work/<task>/brief.md`. Main alone maintains it as a current snapshot, not an execution log. Update it when the user outcome or acceptance changes, verified repository facts or risks materially change, before a context switch or handoff, and at final delivery. It may retain compact recovery pointers such as paths, symbols, tests, and errors, but project facts and current instructions always take precedence.
+When a brief is useful, instantiate [main-work-brief.md](assets/main-work-brief.md) as `.agent-work/<task>/brief.md`. Main alone maintains it as a current snapshot, not an execution log. Update it when the user outcome or acceptance changes, verified repository facts or risks materially change, before a context switch or handoff, and at final delivery. It may retain compact recovery pointers such as paths, symbols, tests, errors, exact active run identifiers, the last terminal stage, continuation owner, remaining stages, and wake condition, but it remains an overwriteable snapshot—not a lock, queue, lifecycle database, or authoritative host status. Project facts, current instructions, current host state, and the current repository always take precedence.
 
 To resume work, read the latest user requirements and repository/host instructions, then the brief if present; inspect the current workspace, branch, diff, and uncommitted changes; rediscover relevant code, tests, configuration, and documentation with available repository capabilities; rerun necessary validation; correct stale brief conclusions; and recompute the remaining work.
 
@@ -70,7 +72,7 @@ Long-lived Architecture documents follow repository location and naming conventi
 
 Expose a capability summary whenever a required item is missing, Skill sources conflict, native binding falls back to a prompt, requested and effective tools/sandbox/isolation differ, or executable package/MCP/extension trust is unmet. Use `unknown` rather than inventing enforcement. Never log secrets, complete environment variables, hidden reasoning, or sensitive MCP data.
 
-After each result, evaluate evidence rather than an envelope, reconcile contradictions from project facts, route defects to the smallest useful focused context, and ask the user only about changed outcomes, permissions, irreversible actions, material cost, or accepted risk. Keep durable facts in code, tests, configuration, documentation, and decision records.
+After each result, evaluate evidence rather than an envelope, reconcile contradictions from project facts, route defects to the smallest useful focused context, and ask the user only about changed outcomes, permissions, irreversible actions, material cost, or accepted risk. A receipt, progress or attention notice, waiting/detached/paused state, or text-only completion claim is not a terminal role result. Before dependent work starts, verify the exact run's terminal state, finalized artifact, and every required parallel outcome. Treat role Markdown and any machine acceptance ledger as independent results; preserve implementation artifacts when acceptance formatting is rejected and repair evidence without reimplementing completed work. Keep durable facts in code, tests, configuration, documentation, and decision records.
 
 ## Configure the team
 
@@ -87,4 +89,4 @@ Prefer the optional `oet` CLI when it is already available: `oet config show --e
 
 ## Deliver one coherent outcome
 
-Report what changed or was learned, material decisions, validation, unresolved risks, and relevant files. Mention specialist activity only where its independent evidence helps the user.
+Report what changed or was learned, material decisions, validation, unresolved risks, and relevant files. Mention specialist activity only where its independent evidence helps the user. Distinguish background execution, supervisor waiting, child recovery with outer continuation unconfirmed, final-review waiting, and Main acceptance from delivery; use completion language only after required final review, validation, finding disposition, and Main acceptance are complete.

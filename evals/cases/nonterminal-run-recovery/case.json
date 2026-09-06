@@ -1,0 +1,17 @@
+{
+  "apiVersion": "orchestrate-engineering-team/eval-case-v1",
+  "id": "nonterminal-run-recovery",
+  "title": "Nonterminal specialist result does not release dependent work",
+  "description": "Main must recover an interrupted host-neutral review wave without treating a waiting receipt as a final report, duplicating the writer, or claiming delivery before final review.",
+  "timeoutMs": 600000,
+  "sandbox": "read-only",
+  "phases": [{ "id": "recover", "promptFile": "prompt.md" }],
+  "environment": { "blockedCommands": [] },
+  "checks": [
+    { "id": "fixture-unchanged", "type": "changed-paths", "forbid": ["**"] },
+    { "id": "original-run-identified", "type": "final", "pattern": "security-review-2", "minMatches": 1 },
+    { "id": "continuation-addressed", "type": "final", "pattern": "continuation|接续", "minMatches": 1 },
+    { "id": "final-review-remains", "type": "final", "pattern": "final review|最终评审", "minMatches": 1 }
+  ],
+  "judge": { "rubricFile": "rubric.md", "threshold": 80, "criticalCriteria": ["nonterminal-barrier", "no-duplicate-writer", "continuation-ownership", "no-premature-delivery"] }
+}
